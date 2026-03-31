@@ -49,8 +49,9 @@ export async function GET(request: NextRequest) {
             orderBy: { serviceName: 'asc' },
         })
 
-        // Auto-seed if empty (and no filters applied)
-        if (services.length === 0 && !category && (active === null)) {
+        // Auto-seed if empty
+        if (services.length === 0) {
+            console.log('Operational Void detected. Triggering auto-seed...')
             const defaultServices = [
                 {
                     serviceName: 'Deposition',

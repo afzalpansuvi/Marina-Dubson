@@ -29,8 +29,7 @@ export async function GET(request: NextRequest) {
                 privateWaitTimeRate: 100,
                 privateAfterHoursRate: 100,
                 description: 'Certified stenographic reporting for standard depositions.',
-                active: true,
-                order: 1
+                active: true
             },
             {
                 serviceName: 'Arbitration/Hearings',
@@ -55,8 +54,7 @@ export async function GET(request: NextRequest) {
                 privateWaitTimeRate: 100,
                 privateAfterHoursRate: 100,
                 description: 'Specialized stenographic support for Arbitration/Hearings and detailed hearings.',
-                active: true,
-                order: 2
+                active: true
             },
             {
                 serviceName: 'Hearing',
@@ -76,8 +74,7 @@ export async function GET(request: NextRequest) {
                 privateAppearanceFeeInPerson: 200,
                 privateMinimumFee: 400,
                 description: 'Stenographic recording services for court hearings and legal proceedings.',
-                active: true,
-                order: 3
+                active: true
             },
             {
                 serviceName: 'Examinations Under Oath',
@@ -94,8 +91,7 @@ export async function GET(request: NextRequest) {
                 expedite3Day: 0.90,
                 privatePageRate: 5.75,
                 description: 'Professional recording for Examinations Under Oath.',
-                active: true,
-                order: 4
+                active: true
             },
             {
                 serviceName: 'CART',
@@ -110,9 +106,8 @@ export async function GET(request: NextRequest) {
                 expedite1Day: 0,
                 expedite2Day: 0,
                 expedite3Day: 0,
-                description: 'Communication Access Real-Time Translation for ADA compliance.',
-                active: true,
-                order: 5
+                description: 'Communication Access Real-Time Translation for ADA accessibility.',
+                active: true
             },
             {
                 serviceName: 'Other',
@@ -128,19 +123,17 @@ export async function GET(request: NextRequest) {
                 expedite2Day: 1.00,
                 expedite3Day: 0.90,
                 description: 'Miscellaneous stenographic services.',
-                active: true,
-                order: 6
+                active: true
             }
         ]
 
         for (const s of services) {
-            const { order, ...data } = s
             await prisma.service.upsert({
                 where: { id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-') },
-                update: data as any,
+                update: s as any,
                 create: {
                     id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-'),
-                    ...data
+                    ...s
                 } as any
             })
         }
