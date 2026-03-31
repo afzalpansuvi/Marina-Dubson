@@ -42,23 +42,18 @@ export async function GET(request: NextRequest) {
         const where: any = {}
 
         // Role-based filtering
-        const userRole = payload.role?.toUpperCase() || 'CLIENT' // Default to safest role
+        const userRole = payload.role?.toUpperCase() || 'CLIENT' 
 
         if (['ADMIN', 'MANAGER', 'SUPER_ADMIN', 'STAFF'].includes(userRole)) {
-            // Admin can see all, or filter by specific contact
             if (contactIdParam) where.contactId = contactIdParam
         } else if (userRole === 'REPORTER') {
-            // Reporter only sees assigned bookings
             where.reporterId = payload.userId
         } else {
-            // Client/Standard User - MUST map to a Contact
-            // Find contact by email
             const contact = await prisma.contact.findUnique({
                 where: { email: payload.email }
             })
 
             if (!contact) {
-                // If no linked contact found for this client user, return empty
                 return NextResponse.json({
                     bookings: [],
                     total: 0,
@@ -150,7 +145,6 @@ export async function POST(request: NextRequest) {
         let contactId = data.contactId
         let userId = payload?.userId || 'system'
 
-        // Automation: If contactId is missing but we have a user email, find the contact
         if (!contactId && payload?.email) {
             const contact = await prisma.contact.findUnique({
                 where: { email: payload.email }
@@ -164,7 +158,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Contact identity required' }, { status: 400 })
         }
 
-        // Validate service existence
         const serviceExists = await prisma.service.findUnique({
             where: { id: data.serviceId }
         })
@@ -172,10 +165,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid service selected' }, { status: 400 })
         }
 
-        // Validate User existence & fallback
         let validUserId = userId
         if (userId === 'system' || userId === 'dev-admin-id') {
-            // Try to find a real admin user to assign this to
             const firstAdmin = await prisma.user.findFirst({
                 where: { role: 'ADMIN' }
             })
@@ -183,12 +174,10 @@ export async function POST(request: NextRequest) {
                 validUserId = firstAdmin.id
             }
         } else {
-            // Verify the specific user exists
             const userExists = await prisma.user.findUnique({
                 where: { id: userId }
             })
             if (!userExists) {
-                // Try to find a real admin user to assign this to
                 const firstAdmin = await prisma.user.findFirst({
                     where: { role: 'ADMIN' }
                 })
@@ -200,25 +189,21 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Generate booking number
         const count = await prisma.booking.count()
         const bookingNumber = `BK${String(count + 1).padStart(6, '0')}`
 
-        // Calculate cancellation deadline (3 PM previous business day)
         const bookingDate = new Date(data.bookingDate)
         const cancellationDeadline = BookingRulesService.calculateCancellationDeadline(bookingDate)
 
-        // Get applicable rates (Custom vs Default)
         const rates = await PricingEngine.getApplicableRates(contactId, data.serviceId)
 
-        // Create booking
         const booking = await prisma.booking.create({
             data: {
                 bookingNumber,
                 contactId: contactId,
                 serviceId: data.serviceId,
                 userId: validUserId,
-                proceedingType: data.proceedingType,
+                proceedingType: serviceExists.serviceName,
                 jurisdiction: data.jurisdiction,
                 state: data.state,
                 bookingDate: new Date(data.bookingDate),
@@ -230,9 +215,8 @@ export async function POST(request: NextRequest) {
                 specialRequirements: data.specialRequirements,
                 bookingStatus: 'SUBMITTED',
                 cancellationDeadline,
-                // Lock in rates
                 lockedPageRate: rates.pageRate,
-                lockedAppearanceFee: data.location?.toLowerCase().includes('remote') || data.location?.toLowerCase().includes('zoom')
+                lockedAppearanceFee: data.appearanceType === 'REMOTE'
                     ? rates.appearanceFeeRemote
                     : rates.appearanceFeeInPerson,
                 lockedMinimumFee: rates.minimumFee,
@@ -244,7 +228,6 @@ export async function POST(request: NextRequest) {
             },
         })
 
-        // Step 1 of Integration Flow: Sync to Zoho CRM & Mailchimp
         try {
             await integrationOrchestrator.syncToZohoCRM({
                 bookingId: booking.id,
@@ -254,17 +237,15 @@ export async function POST(request: NextRequest) {
                 contactPhone: booking.contact.phone || undefined,
                 companyName: booking.contact.companyName || undefined,
                 serviceName: booking.service.serviceName,
-                serviceAmount: booking.lockedAppearanceFee || rates.minimumFee, // Use locked fee
+                serviceAmount: booking.lockedAppearanceFee || rates.minimumFee,
                 bookingDate: format(bookingDate, 'yyyy-MM-dd'),
                 bookingNumber: booking.bookingNumber,
                 proceedingType: booking.proceedingType,
             })
         } catch (syncError) {
-            console.error('Initial integration sync failed:', syncError)
-            // We don't block the response if sync fails, but we logged it
+            console.error('Integration sync failed:', syncError)
         }
 
-        // Send confirmation email
         const emailTemplate = emailTemplates.bookingPending(
             bookingNumber,
             `${booking.contact.firstName} ${booking.contact.lastName}`
@@ -279,17 +260,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(booking, { status: 201 })
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: 'Invalid input', details: error.errors },
-                { status: 400 }
-            )
+            return NextResponse.json({ error: 'Invalid input', details: error.errors }, { status: 400 })
         }
-
         console.error('Create booking error:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }
 
@@ -310,7 +284,6 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Booking ID required' }, { status: 400 })
         }
 
-        // Fetch booking to verify ownership
         const booking = await prisma.booking.findUnique({
             where: { id },
             include: { contact: true }
@@ -320,7 +293,6 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
         }
 
-        // Authorization: Admin can delete any, users/reporters can only delete their own
         const isOwner = booking.contact?.email === payload.email || booking.userId === payload.userId || booking.reporterId === payload.userId
         const isAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(payload.role?.toUpperCase() || '')
 
@@ -328,7 +300,6 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
-        // Only allow deletion if NOT completed
         if (booking.bookingStatus === 'COMPLETED' && !isAdmin) {
             return NextResponse.json({ error: 'Cannot delete completed bookings' }, { status: 400 })
         }

@@ -7,9 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import BookingRulesService from '@/lib/booking-rules'
 import prisma from '@/lib/prisma'
-import { integrationOrchestrator } from '@/lib/integration-orchestrator'
 import { PricingEngine } from '@/lib/pricing-engine'
-import { format } from 'date-fns'
 
 export async function POST(request: NextRequest) {
     try {
@@ -135,8 +133,9 @@ export async function GET(request: NextRequest) {
         }
 
         // Calculate estimated total using Pricing Logic
-        // Requirement 6.2: If Custom Pricing Enabled = TRUE → use client-specific pricing, Else → use service defaults
-        const rates = await PricingEngine.getApplicableRates(booking.contactId, booking.serviceId)
+        // Requirement 13: Determine rate tier from clientType (PRIVATE vs STANDARD/AGENCY)
+        const rateTier = booking.contact.clientType.toUpperCase() === 'PRIVATE' ? 'PRIVATE' : 'STANDARD'
+        const rates = await PricingEngine.getApplicableRates(booking.contactId, booking.serviceId, rateTier)
         const estimatedTotal = PricingEngine.calculateEstimate(rates) // Minimum fee automatically applied
 
         // Get confirmation terms

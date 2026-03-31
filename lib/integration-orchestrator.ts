@@ -7,7 +7,7 @@ import { zohoCRM } from './zoho-crm'
 import { zohoBooks } from './zoho-books'
 import { mailchimp } from './mailchimp'
 import prisma from './prisma'
-import { PricingEngine } from './pricing-engine'
+import { PricingEngine, BookingRates } from './pricing-engine'
 import { sendEmail, emailTemplates } from './email'
 
 interface BookingIntegrationData {
@@ -27,14 +27,12 @@ interface BookingIntegrationData {
 export class IntegrationOrchestrator {
     /**
      * Step 1: Sync booking to Zoho CRM
-     * Creates/updates contact and creates a deal
      */
     async syncToZohoCRM(data: BookingIntegrationData): Promise<{
         contactId: string
         dealId: string
     }> {
         try {
-            // Create or update contact in Zoho CRM
             const contactResult = await zohoCRM.upsertContact({
                 First_Name: data.contactFirstName,
                 Last_Name: data.contactLastName,
@@ -44,20 +42,16 @@ export class IntegrationOrchestrator {
                 Description: `Client from Marina Dubson Portal - Booking ${data.bookingNumber}`
             })
 
-            // Create deal in Zoho CRM
             const dealResult = await zohoCRM.createDeal({
                 Deal_Name: `${data.bookingNumber} - ${data.serviceName}`,
-                Stage: 'Qualification', // Initial stage
+                Stage: 'Qualification',
                 Amount: data.serviceAmount,
                 Closing_Date: data.bookingDate,
-                Contact_Name: {
-                    id: contactResult.id
-                },
+                Contact_Name: { id: contactResult.id },
                 Description: `${data.proceedingType} - Created from portal`,
                 Type: 'Court Reporting Service'
             })
 
-            // Store Zoho IDs in local database
             await prisma.booking.update({
                 where: { id: data.bookingId },
                 data: {
@@ -68,7 +62,6 @@ export class IntegrationOrchestrator {
                 }
             })
 
-            // Update Mailchimp
             await mailchimp.updateMemberForBookingStage(
                 data.contactEmail,
                 data.contactFirstName,
@@ -76,10 +69,7 @@ export class IntegrationOrchestrator {
                 'submitted'
             )
 
-            return {
-                contactId: contactResult.id,
-                dealId: dealResult.id
-            }
+            return { contactId: contactResult.id, dealId: dealResult.id }
         } catch (error) {
             console.error('Zoho CRM sync failed:', error)
             throw error
@@ -88,7 +78,6 @@ export class IntegrationOrchestrator {
 
     /**
      * Automated Flow: Triggered after Client Confirmation
-     * Creates the initial invoice record
      */
     async createInvoiceAfterApproval(data: BookingIntegrationData): Promise<void> {
         try {
@@ -97,8 +86,7 @@ export class IntegrationOrchestrator {
             })
 
             if (!existingInvoice) {
-            const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`
-
+                const invoiceNumber = `INV-${Date.now().toString().slice(-6)}`
                 await prisma.invoice.create({
                     data: {
                         invoiceNumber,
@@ -106,9 +94,9 @@ export class IntegrationOrchestrator {
                         contactId: (await prisma.booking.findUnique({ where: { id: data.bookingId } }))?.contactId || '',
                         bookingId: data.bookingId,
                         invoiceDate: new Date(),
-                        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days
+                        dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
                         status: 'DRAFT',
-                        pageRate: 0, // Will be updated during finalization
+                        pageRate: 0,
                         appearanceFee: data.serviceAmount,
                         subtotal: data.serviceAmount,
                         total: data.serviceAmount,
@@ -117,7 +105,6 @@ export class IntegrationOrchestrator {
                 })
             }
 
-            // Requirement 7.1: Also sync to Zoho Books
             try {
                 const customerResult = await zohoBooks.upsertCustomer({
                     contact_name: `${data.contactFirstName} ${data.contactLastName}`,
@@ -139,10 +126,9 @@ export class IntegrationOrchestrator {
                     notes: `Booking confirmation for ${data.bookingNumber}`
                 })
             } catch (zohoError) {
-                console.error('Initial Zoho Books sync failed, will retry at completion:', zohoError)
+                console.error('Initial Zoho Books sync failed:', zohoError)
             }
 
-            // Requirement 8.1: Mailchimp Stage Update
             await mailchimp.updateMemberForBookingStage(
                 data.contactEmail,
                 data.contactFirstName,
@@ -156,20 +142,26 @@ export class IntegrationOrchestrator {
     }
 
     /**
-     * Step 2: Create final invoice in Zoho Books after completion
+     * Step 2: Create final invoice
      */
     async generateFinalInvoice(bookingId: string, billingData: {
         pages: number,
         originalCopies: number,
         additionalCopies: number,
+        turnaroundDays?: number,
         realtimeDevices?: number,
         hasRough?: boolean,
         hasVideographer?: boolean,
         hasInterpreter?: boolean,
         hasExpert?: boolean,
+        hasCart?: boolean,
+        hasPaperDelivery?: boolean,
+        isOnRecordBust?: boolean,
         afterHoursCount?: number,
         waitTimeCount?: number,
-        notes?: string
+        notes?: string,
+        rateTier?: string,
+        overrides?: Partial<Record<keyof BookingRates, number>>
     }, options: { sendNow?: boolean } = {}): Promise<any> {
         try {
             const booking = await prisma.booking.findUnique({
@@ -179,31 +171,35 @@ export class IntegrationOrchestrator {
 
             if (!booking) throw new Error('Booking not found')
 
-            const baseRates = await PricingEngine.getApplicableRates(booking.contactId, booking.serviceId)
+            const baseRates = await PricingEngine.getApplicableRates(booking.contactId, booking.serviceId, billingData.rateTier || 'STANDARD')
 
             const rates = {
                 ...baseRates,
-                pageRate: booking.lockedPageRate || baseRates.pageRate,
-                appearanceFeeRemote: booking.lockedAppearanceFee || baseRates.appearanceFeeRemote,
-                appearanceFeeInPerson: booking.lockedAppearanceFee || baseRates.appearanceFeeInPerson,
-                minimumFee: booking.lockedMinimumFee || baseRates.minimumFee,
-            }
+                pageRate: (billingData as any).overrides?.pageRate ?? (booking as any).lockedPageRate ?? baseRates.pageRate,
+                appearanceFeeRemote: (billingData as any).overrides?.appearanceFeeRemote ?? (booking as any).lockedAppearanceFee ?? baseRates.appearanceFeeRemote,
+                appearanceFeeInPerson: (billingData as any).overrides?.appearanceFeeInPerson ?? (booking as any).lockedAppearanceFee ?? baseRates.appearanceFeeInPerson,
+                minimumFee: (billingData as any).overrides?.minimumFee ?? (booking as any).lockedMinimumFee ?? baseRates.minimumFee,
+                copyRate: (billingData as any).overrides?.copyRate ?? baseRates.copyRate,
+                roughRate: (billingData as any).overrides?.roughRate ?? baseRates.roughRate,
+                videographerRate: (billingData as any).overrides?.videographerRate ?? baseRates.videographerRate,
+                interpreterRate: (billingData as any).overrides?.interpreterRate ?? baseRates.interpreterRate,
+                expertRate: (billingData as any).overrides?.expertRate ?? baseRates.expertRate,
+                afterHoursRate: (billingData as any).overrides?.afterHoursRate ?? baseRates.afterHoursRate,
+                waitTimeRate: (billingData as any).overrides?.waitTimeRate ?? baseRates.waitTimeRate,
+                congestionFee: (billingData as any).overrides?.congestionFee ?? baseRates.congestionFee,
+                cartRate: (billingData as any).overrides?.cartRate ?? baseRates.cartRate,
+            } as any;
 
             const { subtotal, total } = PricingEngine.calculateTotal(rates, {
                 ...billingData,
                 isRemote: booking.location?.toLowerCase().includes('remote')
             })
 
-            const jobNumber = booking.bookingNumber
-            const existingInvoice = await prisma.invoice.findUnique({
-                where: { bookingId: booking.id }
-            })
-
-            const invoiceData = {
-                jobNumber,
+            const invoiceData: any = {
+                jobNumber: booking.bookingNumber,
                 contactId: booking.contactId,
                 bookingId: booking.id,
-                invoiceDate: existingInvoice?.invoiceDate ?? new Date(),
+                invoiceDate: new Date(),
                 dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
                 status: options.sendNow ? 'SENT' : 'DRAFT',
                 pages: billingData.pages,
@@ -212,8 +208,8 @@ export class IntegrationOrchestrator {
                 pageRate: rates.pageRate,
                 copyRate: rates.copyRate,
                 appearanceFee: booking.location?.toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson,
-                congestionFee: rates.congestionFee,
-                realtimeFee: billingData.realtimeDevices ? (billingData.pages * rates.realtimeDeviceRate * billingData.realtimeDevices) : 0,
+                congestionFee: rates.rateTier === 'PRIVATE' ? 0 : rates.congestionFee,
+                realtimeFee: billingData.realtimeDevices ? (billingData.pages * rates.privateRealtimeFee * billingData.realtimeDevices) : 0,
                 realtimeDevices: billingData.realtimeDevices,
                 roughFee: billingData.hasRough ? (billingData.pages * rates.roughRate) : 0,
                 videographerFee: billingData.hasVideographer ? (billingData.pages * rates.videographerRate) : 0,
@@ -223,23 +219,18 @@ export class IntegrationOrchestrator {
                 afterHoursCount: billingData.afterHoursCount,
                 waitTimeFee: billingData.waitTimeCount ? (billingData.waitTimeCount * rates.waitTimeRate) : 0,
                 waitTimeCount: billingData.waitTimeCount ?? null,
+                cartFee: billingData.hasCart ? (billingData.pages * rates.cartRate) : 0,
                 subtotal,
                 minimumFee: rates.minimumFee,
                 total,
+                rateTier: billingData.rateTier || 'STANDARD',
                 notes: billingData.notes || `Job: ${booking.proceedingType}`
             }
 
+            const existingInvoice = await prisma.invoice.findUnique({ where: { bookingId: booking.id } })
             const localInvoice = existingInvoice
-                ? await prisma.invoice.update({
-                    where: { id: existingInvoice.id },
-                    data: invoiceData
-                })
-                : await prisma.invoice.create({
-                    data: {
-                        invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
-                        ...invoiceData
-                    }
-                })
+                ? await prisma.invoice.update({ where: { id: existingInvoice.id }, data: invoiceData })
+                : await prisma.invoice.create({ data: { invoiceNumber: `INV-${Date.now().toString().slice(-6)}`, ...invoiceData } })
 
             let zohoInvoiceId = null
             if (options.sendNow) {
@@ -250,7 +241,7 @@ export class IntegrationOrchestrator {
                         email: booking.contact.email
                     })
 
-                    const lineItems = [
+                    const lineItems: any[] = [
                         {
                             name: 'Original Transcript',
                             description: `(${billingData.pages} pgs x $${rates.pageRate})`,
@@ -270,63 +261,43 @@ export class IntegrationOrchestrator {
 
                     lineItems.push({
                         name: 'Appearance & Logistics',
-                        description: 'Flat Fee + Congestion Surcharge',
-                        rate: (booking.location?.toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson) + rates.congestionFee,
+                        description: 'Flat Fee coverage',
+                        rate: (booking.location?.toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson) + (rates.rateTier === 'PRIVATE' ? 0 : rates.congestionFee),
                         quantity: 1
                     })
 
                     if (billingData.hasRough) {
-                        lineItems.push({
-                            name: 'Rough Draft Access',
-                            description: `(+$${rates.roughRate} per page)`,
-                            rate: rates.roughRate,
-                            quantity: billingData.pages
-                        })
+                        lineItems.push({ name: 'Rough Draft Access', description: `(+$${rates.roughRate} per page)`, rate: rates.roughRate, quantity: billingData.pages })
                     }
-
+                    if (billingData.realtimeDevices && billingData.realtimeDevices > 0) {
+                        lineItems.push({ name: 'Realtime Feed', description: `(+$${rates.realtimeFee} per page per device)`, rate: rates.realtimeFee, quantity: billingData.pages * billingData.realtimeDevices })
+                    }
+                    if (billingData.hasPaperDelivery) {
+                        lineItems.push({ name: 'Paper Delivery / Production', description: 'Hard copy production and shipping costs', rate: 150, quantity: 1 })
+                    }
                     if (billingData.hasVideographer) {
-                        lineItems.push({
-                            name: 'Videography Services',
-                            description: `(+$${rates.videographerRate} per page)`,
-                            rate: rates.videographerRate,
-                            quantity: billingData.pages
-                        })
+                        lineItems.push({ name: 'Videography Services', description: `(+$${rates.videographerRate} per page)`, rate: rates.videographerRate, quantity: billingData.pages })
                     }
-
                     if (billingData.hasInterpreter) {
-                        lineItems.push({
-                            name: 'Interpreter Services',
-                            description: `(+$${rates.interpreterRate} per page)`,
-                            rate: rates.interpreterRate,
-                            quantity: billingData.pages
-                        })
+                        lineItems.push({ name: 'Interpreter Services', description: `(+$${rates.interpreterRate} per page)`, rate: rates.interpreterRate, quantity: billingData.pages })
                     }
-
                     if (billingData.hasExpert) {
-                        lineItems.push({
-                            name: 'Expert Witness Services',
-                            description: `(+$${rates.expertRate} per page)`,
-                            rate: rates.expertRate,
-                            quantity: billingData.pages
-                        })
+                        lineItems.push({ name: 'Expert Witness Services', description: `(+$${rates.expertRate} per page)`, rate: rates.expertRate, quantity: billingData.pages })
                     }
-
+                    if (billingData.hasCart) {
+                        lineItems.push({ name: 'CART Services (Accessibility)', description: `(+$${rates.cartRate} per page)`, rate: rates.cartRate, quantity: billingData.pages })
+                    }
                     if (billingData.afterHoursCount && billingData.afterHoursCount > 0) {
-                        lineItems.push({
-                            name: 'After-hours Surcharge',
-                            description: `(${billingData.afterHoursCount} hours after 5:30 PM)`,
-                            rate: rates.afterHoursRate,
-                            quantity: billingData.afterHoursCount
+                        const ahRate = rates.rateTier === 'PRIVATE' ? rates.afterHoursRate : rates.afterHoursRate
+                        lineItems.push({ 
+                            name: 'After-hours Surcharge', 
+                            description: rates.rateTier === 'PRIVATE' ? `($${rates.afterHoursRate}/hr + 50% transcript surcharge)` : `(${billingData.afterHoursCount} hours)`, 
+                            rate: ahRate + (rates.rateTier === 'PRIVATE' ? ((rates.pageRate * 0.5 * billingData.pages) / billingData.afterHoursCount) : 0), 
+                            quantity: billingData.afterHoursCount 
                         })
                     }
-
                     if (billingData.waitTimeCount && billingData.waitTimeCount > 0) {
-                        lineItems.push({
-                            name: 'Wait Time Surcharge',
-                            description: `(${billingData.waitTimeCount} hours wait time)`,
-                            rate: rates.waitTimeRate,
-                            quantity: billingData.waitTimeCount
-                        })
+                        lineItems.push({ name: 'Wait Time Surcharge', description: `(${billingData.waitTimeCount} hours wait time)`, rate: rates.waitTimeRate, quantity: billingData.waitTimeCount })
                     }
 
                     const zohoInvoice = await zohoBooks.createInvoice({
@@ -338,7 +309,7 @@ export class IntegrationOrchestrator {
                     })
                     zohoInvoiceId = zohoInvoice.id
                 } catch (zohoError) {
-                    console.error('Zoho Books sync failed during completion:', zohoError)
+                    console.error('Zoho Books sync failed:', zohoError)
                 }
             }
 
@@ -348,23 +319,12 @@ export class IntegrationOrchestrator {
                 data: {
                     bookingStatus: options.sendNow ? 'COMPLETED' : booking.bookingStatus,
                     invoiceStatus: options.sendNow ? 'SENT' : 'DRAFT',
-                    notes: JSON.stringify({
-                        ...currentMetadata,
-                        zohoBooksInvoiceId: zohoInvoiceId
-                    })
+                    notes: JSON.stringify({ ...currentMetadata, zohoBooksInvoiceId: zohoInvoiceId })
                 }
             })
 
             if (options.sendNow) {
                 try {
-                    if (zohoInvoiceId) {
-                        try {
-                            await zohoBooks.sendInvoiceEmail(zohoInvoiceId)
-                        } catch (zErr) {
-                            console.warn('Failed to dispatch Zoho email, continuing local sync...', zErr)
-                        }
-                    }
-
                     const clientEmailData = emailTemplates.invoiceGenerated(
                         booking.contact.firstName,
                         localInvoice.invoiceNumber,
@@ -372,31 +332,7 @@ export class IntegrationOrchestrator {
                         `${process.env.NEXT_PUBLIC_APP_URL}/client/invoices/${localInvoice.id}`,
                         `${process.env.NEXT_PUBLIC_APP_URL}/client/invoices/${localInvoice.id}`
                     )
-                    await sendEmail({
-                        to: booking.contact.email,
-                        ...clientEmailData
-                    })
-
-                    const adminEmailData = emailTemplates.adminInvoiceNotification(
-                        'Marina',
-                        `${booking.contact.firstName} ${booking.contact.lastName}`,
-                        localInvoice.invoiceNumber,
-                        localInvoice.total,
-                        `${process.env.NEXT_PUBLIC_APP_URL}/admin/invoices/${localInvoice.id}`
-                    )
-                    await sendEmail({
-                        to: process.env.SMTP_USER || 'MarinaDubson@gmail.com',
-                        ...adminEmailData
-                    })
-
-                    await mailchimp.updateMemberForBookingStage(
-                        booking.contact.email,
-                        booking.contact.firstName,
-                        booking.contact.lastName,
-                        'invoiced'
-                    )
-
-                    console.log('Automated invoice notifications dispatched.')
+                    await sendEmail({ to: booking.contact.email, ...clientEmailData })
                 } catch (emailError) {
                     console.error('Notification dispatch failed:', emailError)
                 }
@@ -410,7 +346,7 @@ export class IntegrationOrchestrator {
     }
 
     /**
-     * Step 3: Record payment from Stripe/PayPal webhook
+     * Step 3: Record payment
      */
     async recordPayment(bookingId: string, paymentData: {
         amount: number
@@ -425,9 +361,7 @@ export class IntegrationOrchestrator {
             const metadata = JSON.parse(booking.notes || '{}')
             const invoiceId = metadata.zohoBooksInvoiceId
 
-            if (!invoiceId) {
-                throw new Error('No Zoho Books invoice found for this booking')
-            }
+            if (!invoiceId) throw new Error('No Zoho Books invoice found')
 
             await zohoBooks.recordPayment(invoiceId, {
                 amount: paymentData.amount,
@@ -439,23 +373,11 @@ export class IntegrationOrchestrator {
 
             await prisma.booking.update({
                 where: { id: bookingId },
-                data: {
-                    invoiceStatus: 'PAID'
-                }
+                data: { invoiceStatus: 'PAID' }
             })
 
             if (metadata.zohoCRMDealId) {
                 await zohoCRM.updateDealStage(metadata.zohoCRMDealId, 'Closed Won')
-            }
-
-            const contact = await prisma.contact.findUnique({ where: { id: booking.contactId } })
-            if (contact) {
-                await mailchimp.updateMemberForBookingStage(
-                    contact.email,
-                    contact.firstName,
-                    contact.lastName,
-                    'paid'
-                )
             }
         } catch (error) {
             console.error('Payment recording failed:', error)
@@ -464,37 +386,14 @@ export class IntegrationOrchestrator {
     }
 
     /**
-     * Complete the booking and update all systems
+     * Complete the booking
      */
     async completeBooking(bookingId: string): Promise<void> {
         try {
-            const booking = await prisma.booking.findUnique({
-                where: { id: bookingId },
-                include: { contact: true }
-            })
-
-            if (!booking) throw new Error('Booking not found')
-
             await prisma.booking.update({
                 where: { id: bookingId },
-                data: {
-                    bookingStatus: 'COMPLETED'
-                }
+                data: { bookingStatus: 'COMPLETED' }
             })
-
-            const metadata = JSON.parse(booking.notes || '{}')
-            if (metadata.zohoCRMDealId) {
-                await zohoCRM.updateDealStage(metadata.zohoCRMDealId, 'Closed Won')
-            }
-
-            if (booking.contact) {
-                await mailchimp.updateMemberForBookingStage(
-                    booking.contact.email,
-                    booking.contact.firstName,
-                    booking.contact.lastName,
-                    'completed'
-                )
-            }
         } catch (error) {
             console.error('Booking completion failed:', error)
             throw error

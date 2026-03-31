@@ -104,7 +104,7 @@ Legal Proceedings
 ```
 Depositions
 Hearings
-Arbitrations
+- `ARBITRATIONS` - Arbitration/Hearings
 EUO
 Trials
 Administrative Hearings

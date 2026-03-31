@@ -68,7 +68,7 @@ export default function ReporterUploadPage() {
             <main className="max-w-4xl mx-auto px-8 py-16">
                 <div className="text-center mb-16">
                     <h1 className="text-5xl font-black tracking-tighter uppercase mb-4 text-foreground">
-                        Asset <span className="text-primary italic">Deployment</span>
+                        Asset <span className="text-primary italic">Submission</span>
                     </h1>
                     <p className="text-muted-foreground font-medium max-w-lg mx-auto leading-relaxed uppercase tracking-widest text-[10px]">Professional Transcript Delivery System v4.0</p>
                 </div>
@@ -145,7 +145,7 @@ export default function ReporterUploadPage() {
                             <div className="p-10 rounded-[2.5rem] bg-primary/5 border border-primary/20 inline-block mx-auto mb-8">
                                 <FileText className="h-12 w-12 text-primary" />
                                 <p className="text-sm font-black text-foreground mt-4 uppercase tracking-tighter">{selectedFile.name}</p>
-                                <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • READY FOR DEPLOY</p>
+                                <p className="text-[10px] font-bold text-muted-foreground mt-1 uppercase">{(selectedFile.size / (1024 * 1024)).toFixed(2)} MB • READY FOR SUBMISSION</p>
                             </div>
 
                             <div className="flex flex-col gap-4 max-w-sm mx-auto">

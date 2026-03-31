@@ -157,7 +157,7 @@ export function LandingHero() {
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4 animate-fade-in" style={{ animationDelay: '400ms' }}>
                     <Link href="/register" className="btn-primary py-4 px-10 text-sm w-full sm:w-auto">
-                        Request Deployment
+                        Schedule Service
                     </Link>
                     <Link href="#services" className="btn-secondary py-4 px-10 text-sm w-full sm:w-auto group">
                         Browse Registry <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -185,9 +185,6 @@ export function LandingServices() {
     useEffect(() => {
         const fetchServices = async () => {
             try {
-                // Fetching services from the public route (pricing redacted)
-                // Note: The public route requires a token currently as per route.ts
-                // I should probably update the route to allow public access for basic info
                 const res = await fetch('/api/services?active=true')
                 const data = await res.json()
                 if (data.services) setServices(data.services)
@@ -200,38 +197,18 @@ export function LandingServices() {
         fetchServices()
     }, [])
 
-    // Curate to two primary services only
-    const cartDescription = 'CART (Communication Access Real-Time Translation) provides live verbatim captions—ideal for Deaf and hard-of-hearing participants or anyone needing immediate text access to the record.'
-    const curatedServices = [
+    const displayServices = services.length > 0 ? services : [
         {
-            name: 'Premium Court Reporting',
-            fallback: {
-                serviceName: 'Premium Court Reporting',
-                category: 'COURT_REPORTING',
-                description: 'Proceeding coverage: Deposition, Arbitration / Mediation, Examination Under Oath with realtime + exhibit support.'
-            }
+            serviceName: 'Premium Court Reporting',
+            category: 'COURT_REPORTING',
+            description: 'Proceeding coverage: Deposition, Arbitration/Hearings, Examination Under Oath with realtime + exhibit support.'
         },
         {
-            name: 'CART Services (Communication Access Real-Time Translation)',
-            fallback: {
-                serviceName: 'CART Services (Communication Access Real-Time Translation)',
-                category: 'ACCESSIBILITY',
-                description: cartDescription
-            }
+            serviceName: 'CART Services',
+            category: 'ACCESSIBILITY',
+            description: 'Communication Access Real-Time Translation providing live verbatim captions for complete accessibility.'
         }
     ]
-
-    const displayServices = curatedServices.map((target) => {
-        const match = services.find((svc) =>
-            svc.serviceName?.toLowerCase().includes(target.name.toLowerCase().split(' ')[0]) ||
-            svc.serviceName === target.name
-        )
-        return {
-            serviceName: target.name,
-            category: match?.category || target.fallback.category,
-            description: match?.description || target.fallback.description,
-        }
-    })
 
     return (
         <section id="services" className="py-24 bg-muted/30">
@@ -290,7 +267,6 @@ export function LandingNewsletter() {
         e.preventDefault()
         if (email) {
             setSubmitted(true)
-            // Hit Mailchimp/API logic would go here
         }
     }
 
@@ -307,7 +283,7 @@ export function LandingNewsletter() {
                     </h3>
                     <p className="text-base text-muted-foreground font-medium max-w-md">
                         Join our technical digest for the latest updates on legal transcription protocols,
-                        industry shifts, and new Marina Dubson infrastructure deployments.
+                        industry shifts, and new Marina Dubson infrastructure upgrades.
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-10">

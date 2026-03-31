@@ -13,7 +13,8 @@ import {
     Loader2,
     CheckCircle2,
     ShieldCheck,
-    AlertCircle
+    AlertCircle,
+    ChevronLeft
 } from 'lucide-react'
 
 export default function RegisterPage() {
@@ -122,8 +123,12 @@ export default function RegisterPage() {
                         </div>
                     ) : (
                         <form onSubmit={handleRegister} className="space-y-6 animate-in slide-in-from-right-8 duration-500">
-                            <button onClick={() => setStep(1)} className="text-xs font-bold text-gray-400 hover:text-gray-600 flex items-center gap-1 mb-4">
-                                ← Change role
+                            <button 
+                                onClick={() => setStep(1)} 
+                                className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 transition-colors mb-6 group"
+                            >
+                                <ChevronLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
+                                Return to Role Selection
                             </button>
 
                             {error && (

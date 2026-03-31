@@ -18,9 +18,9 @@ import {
 
 const PRIMARY_SERVICES = [
     {
-        title: 'Premium Court Reporting',
+        title: 'Professional Stenographic Reporting',
         summary: 'Certified reporters with realtime delivery, drawing on a team of editors who verify transcripts before they hit your inbox.',
-        tag: 'Depositions • Arbitrations • Trials',
+        tag: 'Depositions • Arbitration/Hearings • Trials',
         highlight: 'When your matter doesn’t fit a silos, choose “Other” in the proceeding type. Our scheduling desk clarifies scope before confirming the assignment.',
         callout: 'Realtime revisions, secure upload, verified transcripts.'
     },

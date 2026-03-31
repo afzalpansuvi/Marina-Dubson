@@ -256,14 +256,18 @@ export default function BookingManagementPage() {
         pages: 0,
         originalCopies: 1,
         additionalCopies: 0,
+        turnaroundDays: 10,
         realtimeDevices: 0,
         hasRough: false,
         hasVideographer: false,
         hasInterpreter: false,
         hasExpert: false,
+        hasCart: false,
         afterHoursCount: 0,
         waitTimeCount: 0,
-        notes: ''
+        notes: '',
+        rateTier: 'STANDARD',
+        overrides: {} as any
     })
 
     const handleComplete = async (id: string) => {
@@ -283,10 +287,6 @@ export default function BookingManagementPage() {
                 const data = await res.json()
                 setCompletedInvoiceId(data.invoiceId)
                 fetchBookings()
-                // Don't close immediately if we want to show the "View Invoice" button in the modal
-                // Or we can just close and the card will have the button.
-                // Let's keep it open or show a success state.
-                // setShowCompleteModal(false) 
             } else {
                 const data = await res.json()
                 setError(data.error || 'Automation sync failed. Please check connectivity.')
@@ -303,20 +303,35 @@ export default function BookingManagementPage() {
         const booking = bookings.find(b => b.id === selectedBookingId)
         if (!booking) return { subtotal: 0, total: 0, breakdown: [] as any[] }
 
-        // Match PricingEngine defaults + locked rates
-        const rates = {
-            pageRate: booking.lockedPageRate || 4.25,
-            copyRate: 1.50,
-            appearance: booking.lockedAppearanceFee || (booking.appearanceType === 'REMOTE' ? 350 : 400),
-            congestion: 15.00,
-            roughRate: 1.50,
-            videoRate: 1.25,
-            interpreterRate: 1.25,
-            expertRate: 2.00,
-            afterHoursRate: 125,
-            waitTimeRate: 100,
-            minFee: booking.lockedMinimumFee || 400 // Corrected to 400 default as per user request
+        // Resolve expedite logic
+        const getExpMultiplier = (days: number) => {
+            const scale: Record<number, number> = { 0: 1.25, 1: 1.10, 2: 1.00, 3: 0.90, 4: 0.80, 5: 0.70, 6: 0.60, 7: 0.50, 8: 0.40, 9: 0.30, 10: 0.20 }
+            return scale[days] ?? 0.20
         }
+
+        const rawBaseRate = (billingData as any).overrides?.pageRate ?? (booking as any).lockedPageRate ?? (billingData.rateTier === 'PRIVATE' ? 4.75 : 4.25)
+        const expediteTier = billingData.turnaroundDays ?? 10
+        const expediteMultiplier = getExpMultiplier(expediteTier)
+        const effectivePageRate = rawBaseRate + (rawBaseRate * expediteMultiplier)
+
+        const rates = {
+            pageRate: effectivePageRate,
+            copyRate: (billingData as any).overrides?.copyRate ?? (billingData.rateTier === 'PRIVATE' ? 0.50 : 1.50),
+            appearance: (billingData as any).overrides?.appearanceFee ?? (booking as any).lockedAppearanceFee ?? (
+                (booking as any).service?.serviceName?.includes('Arbitration') || (booking as any).service?.serviceName?.includes('Hearing')  // Special Rule for Arbitration/Hearings
+                    ? 300 
+                    : ((booking as any).appearanceType === 'REMOTE' ? 100 : 200)
+            ),
+            congestion: (billingData as any).overrides?.congestionFee ?? 15.00,
+            roughRate: (billingData as any).overrides?.roughRate ?? (billingData.rateTier === 'PRIVATE' ? 1.75 : 1.50),
+            videoRate: (billingData as any).overrides?.videographerRate ?? 1.25,
+            interpreterRate: (billingData as any).overrides?.interpreterRate ?? 1.25,
+            expertRate: (billingData as any).overrides?.expertRate ?? 2.00,
+            afterHoursRate: (billingData as any).overrides?.afterHoursRate ?? 125,
+            waitTimeRate: (billingData as any).overrides?.waitTimeRate ?? 100,
+            cartRate: (billingData as any).overrides?.cartRate ?? 2.00,
+            minFee: (billingData as any).overrides?.minimumFee ?? (booking as any).lockedMinimumFee ?? (billingData.rateTier === 'PRIVATE' ? 400 : 400)
+        } as any
 
         const breakdown = []
 
@@ -324,18 +339,18 @@ export default function BookingManagementPage() {
         let currentBase = 0
         const pageCharge = billingData.pages * rates.pageRate
         if (pageCharge > 0) {
-            breakdown.push({ label: 'Original Transcript', value: pageCharge, detail: `${billingData.pages} pgs @ $${rates.pageRate}` })
+            breakdown.push({ label: `Transcript (${expediteTier} Day)`, value: pageCharge, detail: `${billingData.pages} pgs @ $${rates.pageRate.toFixed(2)}` })
             currentBase += pageCharge
         }
 
         if (billingData.additionalCopies > 0) {
             const copyCharge = billingData.pages * rates.copyRate * billingData.additionalCopies
-            breakdown.push({ label: 'Transcript Copies (Printing)', value: copyCharge, detail: `${billingData.additionalCopies} sets @ $${rates.copyRate}/pg` })
+            breakdown.push({ label: 'Transcript Copies', value: copyCharge, detail: `${billingData.additionalCopies} sets @ $${rates.copyRate}/pg` })
             currentBase += copyCharge
         }
 
         // Operations (Base + Congestion)
-        breakdown.push({ label: 'Deployment & Appearance', value: rates.appearance + rates.congestion, detail: 'Base + Congestion Fee' })
+        breakdown.push({ label: 'Service & Appearance', value: rates.appearance + rates.congestion, detail: 'Base + Congestion Fee' })
         currentBase += (rates.appearance + rates.congestion)
 
         // Apply Minimum Fee floor to BASE
@@ -366,6 +381,11 @@ export default function BookingManagementPage() {
             breakdown.push({ label: 'Expert Witness Coordination', value: expert, detail: `+$${rates.expertRate}/pg (Additive)` })
             currentExtras += expert
         }
+        if (billingData.hasCart) {
+            const cart = billingData.pages * rates.cartRate
+            breakdown.push({ label: 'CART Services (Accessibility)', value: cart, detail: `+$${rates.cartRate}/pg (Additive)` })
+            currentExtras += cart
+        }
 
         if (billingData.afterHoursCount > 0) {
             const ah = billingData.afterHoursCount * rates.afterHoursRate
@@ -382,7 +402,6 @@ export default function BookingManagementPage() {
     }
 
     const calculation = getDraftCalculation()
-
 
     const fetchReporters = async () => {
         try {
@@ -445,8 +464,10 @@ export default function BookingManagementPage() {
             try {
                 const token = localStorage.getItem('token')
                 const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } })
-                const data = await res.json()
-                setCurrentUser(data.user || null)
+                if (res.ok) {
+                   const data = await res.json()
+                   setCurrentUser(data.user || null)
+                }
             } catch (error) {
                 console.error('Failed to fetch current user:', error)
             }
@@ -537,179 +558,76 @@ export default function BookingManagementPage() {
                                 </div>
                             </div>
                         ))
-                    ) : filteredBookings.sort((a, b) => {
-                        // Un-opened first, then SUBMITTED, then most recent date
+                    ) : (bookings || []).filter(b => {
+                        const q = searchQuery.toLowerCase()
+                        const matchesStatus = filter === 'ALL' || b.bookingStatus === filter
+                        const matchesSearch = !searchQuery ||
+                            b.bookingNumber?.toLowerCase().includes(q) ||
+                            b.contact?.companyName?.toLowerCase().includes(q) ||
+                            b.contact?.firstName?.toLowerCase().includes(q) ||
+                            b.contact?.lastName?.toLowerCase().includes(q)
+                        return matchesStatus && matchesSearch
+                    }).sort((a, b) => {
                         if (!a.isOpened && b.isOpened) return -1
                         if (a.isOpened && !b.isOpened) return 1
                         if (a.bookingStatus === 'SUBMITTED' && b.bookingStatus !== 'SUBMITTED') return -1
-                        if (a.bookingStatus !== 'SUBMITTED' && b.bookingStatus === 'SUBMITTED') return 1
                         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                     }).map(b => (
                         <div key={b.id} onClick={() => markAsOpened(b.id)} className={`px-4 sm:px-8 py-5 sm:py-6 hover:bg-primary/5 transition-all cursor-pointer group flex flex-col xl:flex-row xl:items-center justify-between gap-6 border-l-4 transition-all ${!b.isOpened ? 'border-amber-500 bg-amber-500/10' : 'border-transparent hover:border-primary'}`}>
                             <div className="flex flex-row items-center gap-4 sm:gap-6 lg:gap-10">
-                                {/* Date Pillar */}
-                                <div className="flex flex-col items-center justify-center h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-muted border border-border shadow-sm group-hover:border-primary/20 transition-all flex-shrink-0">
+                                <div className="flex flex-col items-center justify-center h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-muted border border-border flex-shrink-0">
                                     <span className="text-[7px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">{new Date(b.bookingDate).toLocaleString('default', { month: 'short' })}</span>
                                     <span className="text-base sm:text-xl font-black text-foreground">{new Date(b.bookingDate).getDate()}</span>
                                 </div>
-
-                                {/* Operational Identity */}
                                 <div className="space-y-1.5">
                                     <div className="flex flex-col gap-1 sm:gap-3">
                                         <div className="flex items-center gap-2">
                                             <span className={`px-1.5 py-0.5 rounded-lg text-[7px] sm:text-[9px] font-black border uppercase tracking-widest leading-none ${!b.isOpened ? 'bg-amber-500 text-white border-amber-600 animate-pulse' : 'bg-primary/10 text-primary border-primary/20'}`}>{b.bookingNumber}</span>
-                                            {!b.isOpened && <span className="text-[7px] font-black text-amber-600 uppercase tracking-widest bg-amber-500/10 px-1.5 py-0.5 rounded-md">NEW SIGNAL</span>}
                                         </div>
-                                        <h4 className="text-sm sm:text-lg font-black text-foreground uppercase tracking-tight group-hover:text-primary transition-colors leading-tight">{b.proceedingType}</h4>
+                                        <h4 className="text-sm sm:text-lg font-black text-foreground uppercase tracking-tight leading-tight">{b.proceedingType}</h4>
                                     </div>
-                                    <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2">
+                                    <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2 text-muted-foreground">
                                         <div className="flex items-center gap-1.5">
-                                            <Building2 className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground/40" />
-                                            <span className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-[0.1em]">{b.contact.companyName || `${b.contact.firstName} ${b.contact.lastName}`}</span>
+                                           <Building2 className="h-3 w-3" />
+                                           <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{b.contact.companyName || `${b.contact.firstName} ${b.contact.lastName}`}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <Clock className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-muted-foreground/40" />
-                                            <span className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-[0.1em]">{b.bookingTime}</span>
+                                           <Clock className="h-3 w-3" />
+                                           <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{b.bookingTime}</span>
                                         </div>
-                                        {b.isMarketplace && (
-                                            <div className="flex items-center gap-1.5">
-                                                <TrendingUp className="h-3 sm:h-3.5 w-3 sm:w-3.5 text-emerald-500" />
-                                                <span className="text-[8px] sm:text-[9px] font-black text-emerald-500 uppercase tracking-[0.1em]">Public Marketplace</span>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 sm:gap-6 w-full sm:w-auto px-1 sm:px-0">
-                                {/* Assignment & Controls Unified */}
-                                <div className="flex flex-nowrap overflow-x-auto no-scrollbar items-center gap-3 p-2 rounded-2xl bg-muted/50 border border-border/50">
-                                    {/* Assignment Badge */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
+                                <div className="flex items-center gap-3 p-2 rounded-2xl bg-muted/50 border border-border/50 overflow-x-auto no-scrollbar">
                                     {b.reporter ? (
-                                        <button
-                                            onClick={() => {
-                                                setAssigningBookingId(b.id)
-                                                setShowAssignModal(true)
-                                            }}
-                                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary hover:bg-primary/90 cursor-pointer transition-all text-primary-foreground shadow-lg shadow-primary/20 shrink-0"
-                                            title="Click to re-assign reporter"
-                                        >
+                                        <button onClick={() => { setAssigningBookingId(b.id); setShowAssignModal(true) }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground min-w-max shadow-lg shadow-primary/20">
                                             <User className="h-3 w-3" />
-                                            <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-[0.05em] whitespace-nowrap">{b.reporter.firstName} {b.reporter.lastName}</span>
+                                            <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{b.reporter.firstName} {b.reporter.lastName}</span>
                                         </button>
                                     ) : (
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <button
-                                                onClick={() => {
-                                                    setAssigningBookingId(b.id)
-                                                    setShowAssignModal(true)
-                                                }}
-                                                className="px-3 py-2 rounded-xl bg-indigo-500 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-500/10 whitespace-nowrap"
-                                            >
-                                                Assign
-                                            </button>
-                                            <button
-                                                onClick={() => toggleMarketplace(b.id, b.isMarketplace)}
-                                                className={`px-3 py-2 rounded-xl text-[8px] sm:text-[9px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${b.isMarketplace ? 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'}`}
-                                            >
-                                                {b.isMarketplace ? 'Unpublish' : 'Publish'}
-                                            </button>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setAssigningBookingId(b.id); setShowAssignModal(true) }} className="px-3 py-2 rounded-xl bg-indigo-500 text-white text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/10">Assign</button>
+                                            <button onClick={() => toggleMarketplace(b.id, b.isMarketplace)} className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border tracking-widest ${b.isMarketplace ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>{b.isMarketplace ? 'Unpublish' : 'Publish'}</button>
                                         </div>
                                     )}
-
-                                    {/* Separator */}
-                                    <div className="h-4 w-px bg-white/10 hidden sm:block"></div>
-
-                                    {/* Action Buttons */}
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        {b.specialRequirements?.trim() && (
-                                            <button
-                                                onClick={() => { setSelectedBookingId(b.id); setAddonText(b.specialRequirements); setShowAddonModal(true) }}
-                                                className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-600 text-[8px] sm:text-[9px] font-black uppercase tracking-widest border border-amber-500/30 hover:bg-amber-500/25"
-                                            >
-                                                Add-On Note
-                                            </button>
-                                        )}
+                                    <div className="flex items-center gap-2">
                                         {b.bookingStatus === 'SUBMITTED' && (
-                                            <>
-                                                <button
-                                                    onClick={() => openReviewModal(b)}
-                                                    className="px-3 sm:px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95"
-                                                >
-                                                    Approve
-                                                </button>
-                                                <button
-                                                    onClick={() => updateStatus(b.id, 'MAYBE')}
-                                                    className="px-3 sm:px-4 py-2 rounded-xl bg-amber-500 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-amber-500/20 active:scale-95"
-                                                >
-                                                    Maybe
-                                                </button>
-                                                <button
-                                                    onClick={() => updateStatus(b.id, 'DECLINED')}
-                                                    className="px-3 sm:px-4 py-2 rounded-xl bg-rose-500 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 active:scale-95"
-                                                >
-                                                    Decline
-                                                </button>
-                                            </>
+                                            <button onClick={() => openReviewModal(b)} className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] font-black uppercase tracking-widest">Approve</button>
                                         )}
-                                        {b.bookingStatus === 'MAYBE' && (
-                                            <>
-                                                <button
-                                                    onClick={() => openReviewModal(b)}
-                                                    className="px-3 sm:px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 active:scale-95"
-                                                >
-                                                    Approve
-                                                </button>
-                                                <button
-                                                    onClick={() => updateStatus(b.id, 'DECLINED')}
-                                                    className="px-3 sm:px-4 py-2 rounded-xl bg-rose-500 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 active:scale-95"
-                                                >
-                                                    Decline
-                                                </button>
-                                            </>
-                                        )}
-                                        {/* Keep Complete & Bill available until admin explicitly runs it (manual only) */}
                                         {!['COMPLETED', 'CANCELLED', 'DECLINED'].includes(b.bookingStatus) && (
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedBookingId(b.id)
-                                                    setCompletedInvoiceId(null)
-                                                    setShowCompleteModal(true)
-                                                }}
-                                                className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-xl active:scale-95"
-                                            >
-                                                Complete & Bill
-                                            </button>
-                                        )}
-                                        {b.reporterId && !['COMPLETED', 'CANCELLED', 'DECLINED'].includes(b.bookingStatus) && (
-                                            <button
-                                                onClick={() => updateStatus(b.id, 'ACCEPTED')}
-                                                className="px-3 sm:px-4 py-2 rounded-xl bg-muted text-foreground text-[8px] sm:text-[9px] font-black uppercase tracking-widest border border-border hover:border-primary/40 active:scale-95"
-                                                title="Unassign reporter (returns to accepted state)"
-                                            >
-                                                Unassign
-                                            </button>
+                                            <button onClick={() => { setSelectedBookingId(b.id); setCompletedInvoiceId(null); setShowCompleteModal(true) }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest">Complete & Bill</button>
                                         )}
                                         {b.bookingStatus === 'COMPLETED' && b.invoice?.id && (
-                                            <Link
-                                                href={`/admin/invoices/${b.invoice.id}`}
-                                                className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-[8px] sm:text-[9px] font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center gap-2"
-                                            >
-                                                <DollarSign className="h-3 w-3" /> View Invoice
+                                            <Link href={`/admin/invoices/${b.invoice.id}`} className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-500/20">
+                                               <DollarSign className="h-3 w-3" /> View Invoice
                                             </Link>
                                         )}
-                                        <div className="px-3 py-2 text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-muted-foreground border border-border rounded-xl">{b.bookingStatus}</div>
+                                        <div className="px-3 py-2 border border-border rounded-xl text-[8px] font-black uppercase tracking-widest text-muted-foreground">{b.bookingStatus}</div>
                                     </div>
                                 </div>
-
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        router.push(`/admin/bookings/${b.id}`)
-                                    }}
-                                    className="flex h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-card border border-border items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/20 transition-all flex-shrink-0"
-                                    aria-label="Open booking details"
-                                >
+                                <button onClick={(e) => { e.stopPropagation(); router.push(`/admin/bookings/${b.id}`) }} className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-card border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/50 transition-all flex-shrink-0">
                                     <ArrowRight className="h-4 sm:h-6 w-4 sm:w-6" />
                                 </button>
                             </div>
@@ -718,299 +636,135 @@ export default function BookingManagementPage() {
                 </div>
             </div>
 
-            {/* Claims Management Modal */}
-            {showClaimsModal && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 lg:pl-80 animate-in fade-in duration-300">
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setShowClaimsModal(false)}></div>
-                    <div className="relative w-full max-w-4xl bg-card rounded-[2rem] sm:rounded-[3.5rem] p-6 sm:p-12 shadow-3xl border border-border overflow-hidden">
-                        <div className="flex items-center justify-between mb-8 sm:mb-12">
-                            <div className="flex items-center gap-4 sm:gap-8">
-                                <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-[1.5rem] bg-primary flex items-center justify-center text-primary-foreground shadow-2xl">
-                                    <TrendingUp className="h-5 w-5 sm:h-9 sm:w-9" />
-                                </div>
-                                <div className="space-y-0.5 sm:space-y-1">
-                                    <h2 className="text-xl sm:text-3xl font-black text-foreground uppercase tracking-tight">Marketplace Claims</h2>
-                                    <p className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] sm:tracking-[0.3em]">Available reporters</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setShowClaimsModal(false)} className="h-10 w-10 sm:h-14 sm:w-14 rounded-xl bg-muted border border-border text-muted-foreground hover:text-foreground transition-all flex items-center justify-center">
-                                <X className="h-5 w-5 sm:h-7 sm:w-7" />
-                            </button>
-                        </div>
-
-                        <div className="space-y-5 max-h-[500px] overflow-y-auto pr-4 custom-scrollbar">
-                            {selectedBookingClaims.length === 0 ? (
-                                <div className="py-24 text-center font-black text-[10px] uppercase tracking-[0.5em] text-muted-foreground animate-pulse">No signals detected...</div>
-                            ) : selectedBookingClaims.map(claim => (
-                                <div key={claim.id} className="p-4 sm:p-8 rounded-[1.5rem] sm:rounded-[2.5rem] bg-muted/30 border border-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between hover:border-primary/20 transition-all group relative overflow-hidden gap-6">
-                                    <div className="flex items-center gap-4 sm:gap-8 relative z-10">
-                                        <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-xl sm:rounded-2xl bg-card border border-border flex items-center justify-center text-lg font-black text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-500">
-                                            {claim.reporter.firstName[0]}
-                                        </div>
-                                        <div>
-                                            <h4 className="text-base sm:text-lg font-black text-foreground uppercase tracking-tight mb-1 sm:mb-2 group-hover:text-primary transition-colors">{claim.reporter.firstName} {claim.reporter.lastName}</h4>
-                                            <span className="text-[7px] sm:text-[9px] font-black text-primary bg-primary/10 px-2.5 py-1 rounded-lg uppercase border border-primary/20 tracking-widest leading-none">{claim.reporter.certification || 'Verified'}</span>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-row items-center justify-between sm:justify-end gap-6 sm:gap-16 relative z-10">
-                                        <div className="text-right">
-                                            <p className="text-[7px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-0.5">Status</p>
-                                            <p className="text-xl sm:text-3xl font-black text-foreground tracking-tighter">{claim.status}</p>
-                                        </div>
-                                        {claim.status === 'PENDING' ? (
-                                            <div className="flex items-center gap-2 sm:gap-3">
-                                                <button
-                                                    onClick={() => declineClaim(claim.id)}
-                                                    className="h-10 sm:h-12 px-4 sm:px-6 rounded-xl sm:rounded-2xl bg-muted border border-border text-muted-foreground hover:text-rose-500 hover:border-rose-500/20 text-[8px] sm:text-[10px] font-black uppercase tracking-widest transition-all"
-                                                >
-                                                    Decline
-                                                </button>
-                                                <button
-                                                    onClick={() => acceptClaim(claim.id)}
-                                                    className="h-10 sm:h-12 px-6 sm:px-8 rounded-xl sm:rounded-2xl bg-foreground text-background text-[8px] sm:text-[10px] font-black uppercase tracking-widest shadow-xl transition-all active:scale-95"
-                                                >
-                                                    Accept
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className={`px-4 sm:px-6 py-2 sm:py-3 rounded-xl sm:rounded-2xl text-[8px] sm:text-[10px] font-black uppercase tracking-widest border ${claim.status === 'ACCEPTED'
-                                                ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                                : 'bg-rose-500/10 text-rose-500 border-rose-500/20'
-                                                }`}>
-                                                {claim.status}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="absolute top-0 right-0 p-8 opacity-[0.02] group-hover:scale-110 transition-transform duration-700">
-                                        <Zap className="h-20 w-20 text-primary" />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showReviewModal && reviewBooking && (
-                <div className="fixed inset-0 z-[260] flex items-center justify-center p-4 animate-in fade-in duration-300">
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-lg" onClick={() => setShowReviewModal(false)} />
-                    <div className="relative w-full max-w-3xl bg-card rounded-[2rem] border border-border shadow-3xl p-8 space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">Review Booking</h2>
-                                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mt-1">Confirm the details before approving assignment</p>
-                            </div>
-                            <button onClick={() => setShowReviewModal(false)} className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
-                                <X className="h-5 w-5" />
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[10px] font-black uppercase tracking-[0.25em]">
-                            <div>
-                                <p className="text-muted-foreground">Booking #</p>
-                                <p className="text-lg text-foreground">{reviewBooking.bookingNumber}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Client</p>
-                                <p className="text-lg text-foreground">{reviewBooking.contact.companyName || `${reviewBooking.contact.firstName} ${reviewBooking.contact.lastName}`}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Service</p>
-                                <p className="text-lg text-foreground">{reviewBooking.service?.serviceName || 'Premium Reporting'}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Proceeding</p>
-                                <p className="text-lg text-foreground">{reviewBooking.proceedingType}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Date / Time</p>
-                                <p className="text-lg text-foreground">{new Date(reviewBooking.bookingDate).toLocaleDateString()} • {reviewBooking.bookingTime}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Location</p>
-                                <p className="text-lg text-foreground">{reviewBooking.location || 'Remote'}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Appearance</p>
-                                <p className="text-lg text-foreground">{reviewBooking.appearanceType === 'IN_PERSON' ? 'On-Site' : 'Remote'}</p>
-                            </div>
-                            <div>
-                                <p className="text-muted-foreground">Marketplace</p>
-                                <p className="text-lg text-foreground">
-                                    {reviewBooking.isMarketplace ? 'Published • Claims expected' : 'Unpublished • Direct assignment only'}
-                                </p>
-                            </div>
-                        </div>
-                        {reviewBooking.specialRequirements && (
-                            <div className="p-4 rounded-2xl bg-muted/40 border border-border text-sm leading-snug">
-                                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">Add-On Notes / Requirements</p>
-                                <p className="text-sm text-foreground">{reviewBooking.specialRequirements}</p>
-                            </div>
-                        )}
-                        <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">
-                            <span>You may still assign directly / publish to marketplace from the main dashboard controls.</span>
-                            <span>Once approved, the job is ready for assignments.</span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <button
-                                onClick={confirmReviewApproval}
-                                disabled={reviewLoading}
-                                className="flex-1 py-3 rounded-2xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-[0.3em] shadow-lg shadow-primary/20 disabled:opacity-60"
-                            >
-                                {reviewLoading ? 'Approving…' : 'Confirm & Approve Booking'}
-                            </button>
-                            <button
-                                onClick={() => setShowReviewModal(false)}
-                                className="flex-1 py-3 rounded-2xl border border-border text-[10px] font-black uppercase tracking-[0.3em]"
-                            >
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Billing Completion Modal */}
             {showCompleteModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 lg:pl-80 animate-in fade-in duration-300">
                     <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setShowCompleteModal(false)}></div>
                     <div className="relative w-full max-w-3xl bg-card rounded-[2rem] sm:rounded-[3.5rem] shadow-3xl border border-border flex flex-col max-h-[90vh] overflow-hidden p-6 sm:p-12">
-                        {/* Modal Header */}
                         <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-12 flex-shrink-0">
                             <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-[1.5rem] bg-foreground text-background flex items-center justify-center shadow-2xl flex-shrink-0">
                                 <DollarSign className="h-5 w-5 sm:h-9 sm:w-9" />
                             </div>
-                            <div className="space-y-0.5 sm:space-y-1">
+                            <div className="space-y-0.5">
                                 <h2 className="text-xl sm:text-3xl font-black text-foreground uppercase tracking-tight">Finalize & Bill</h2>
-                                <p className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] sm:tracking-[0.3em]">Operational data for invoicing</p>
+                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Invoicing Metadata</p>
                             </div>
-                            <button onClick={() => setShowCompleteModal(false)} className="ml-auto h-10 w-10 sm:h-14 sm:w-14 rounded-xl bg-muted border border-border text-muted-foreground hover:text-foreground transition-all flex items-center justify-center">
-                                <X className="h-5 w-5 sm:h-7 sm:w-7" />
+                            <button onClick={() => setShowCompleteModal(false)} className="ml-auto h-10 w-10 sm:h-14 sm:w-14 rounded-xl bg-muted border border-border flex items-center justify-center">
+                                <X className="h-5 w-5" />
                             </button>
                         </div>
 
-                        {/* Scrollable Content */}
-                        <div className="overflow-y-auto custom-scrollbar space-y-6 sm:space-y-10 pr-2 sm:pr-4">
-                            <div className="grid grid-cols-2 gap-4 sm:gap-8">
-                                <div className="space-y-2 sm:space-y-4">
-                                    <label className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] sm:tracking-[0.4em] ml-1 sm:ml-2">Total Pages</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 sm:px-6 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-muted/50 border border-border focus:border-primary/50 outline-none font-black text-lg sm:text-2xl focus:ring-4 focus:ring-primary/10 transition-all text-foreground text-center tracking-tighter"
-                                        value={billingData.pages}
-                                        onChange={(e) => setBillingData({ ...billingData, pages: parseInt(e.target.value) || 0 })}
-                                    />
+                        <div className="overflow-y-auto custom-scrollbar space-y-6 sm:space-y-10 pr-2">
+                            {/* Rate Tiers */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 bg-muted/50 p-4 rounded-2xl border border-border">
+                                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                    <Shield className="h-5 w-5" />
                                 </div>
-                                <div className="space-y-2 sm:space-y-4">
-                                    <label className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] sm:tracking-[0.4em] ml-1 sm:ml-2">Copies</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 sm:px-6 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-muted/50 border border-border focus:border-primary/50 outline-none font-black text-lg sm:text-2xl focus:ring-4 focus:ring-primary/10 transition-all text-foreground text-center tracking-tighter"
-                                        value={billingData.additionalCopies}
-                                        onChange={(e) => setBillingData({ ...billingData, additionalCopies: parseInt(e.target.value) || 0 })}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="bg-muted/30 rounded-[2rem] p-8 border border-border space-y-8">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="h-2 w-2 rounded-full bg-primary"></div>
-                                    <label className="text-[10px] font-black text-foreground uppercase tracking-[0.4em]">Extended Operations Matrix</label>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                    <CheckboxItem label="Rough Draft" checked={billingData.hasRough} onChange={(v) => setBillingData({ ...billingData, hasRough: v })} />
-                                    <CheckboxItem label="Videographer" checked={billingData.hasVideographer} onChange={(v) => setBillingData({ ...billingData, hasVideographer: v })} />
-                                    <CheckboxItem label="Interpreter" checked={billingData.hasInterpreter} onChange={(v) => setBillingData({ ...billingData, hasInterpreter: v })} />
-                                    <CheckboxItem label="Expert Presence" checked={billingData.hasExpert} onChange={(v) => setBillingData({ ...billingData, hasExpert: v })} />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 sm:gap-8">
-                                <div className="space-y-2 sm:space-y-4">
-                                    <label className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] sm:tracking-[0.4em] ml-1 sm:ml-2">Afterhours (Hrs)</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 sm:px-6 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-muted/50 border border-border focus:border-primary/50 outline-none font-black text-lg sm:text-2xl focus:ring-4 focus:ring-primary/10 transition-all text-foreground text-center tracking-tighter"
-                                        value={billingData.afterHoursCount}
-                                        onChange={(e) => setBillingData({ ...billingData, afterHoursCount: parseInt(e.target.value) || 0 })}
-                                    />
-                                </div>
-                                <div className="space-y-2 sm:space-y-4">
-                                    <label className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] sm:tracking-[0.4em] ml-1 sm:ml-2">Wait Time (Hrs)</label>
-                                    <input
-                                        type="number"
-                                        className="w-full px-4 sm:px-6 py-3 sm:py-5 rounded-xl sm:rounded-2xl bg-muted/50 border border-border focus:border-primary/50 outline-none font-black text-lg sm:text-2xl focus:ring-4 focus:ring-primary/10 transition-all text-foreground text-center tracking-tighter"
-                                        value={billingData.waitTimeCount}
-                                        onChange={(e) => setBillingData({ ...billingData, waitTimeCount: parseInt(e.target.value) || 0 })}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Live Invoice Preview */}
-                            <div className="bg-foreground/5 rounded-[1.5rem] sm:rounded-[2.5rem] p-4 sm:p-8 border border-foreground/10 space-y-4 sm:space-y-6">
-                                <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center gap-2 sm:gap-3">
-                                        <Zap className="h-4 w-4 text-primary animate-pulse" />
-                                        <span className="text-[8px] sm:text-[10px] font-black text-foreground uppercase tracking-[0.2em] sm:tracking-[0.4em]">Calculation Matrix</span>
+                                <div className="flex-1 space-y-2">
+                                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Rate Registry Template</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setBillingData({ ...billingData, rateTier: 'STANDARD' })} className={`flex-1 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${billingData.rateTier === 'STANDARD' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>Standard</button>
+                                        <button onClick={() => setBillingData({ ...billingData, rateTier: 'PRIVATE' })} className={`flex-1 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${billingData.rateTier === 'PRIVATE' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>Private Client</button>
                                     </div>
-                                    <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[7px] font-black uppercase tracking-widest border border-primary/20">Draft</span>
                                 </div>
+                            </div>
 
-                                <div className="space-y-2 sm:space-y-3">
+                            {/* Automated Expedite Sliders */}
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between ml-2">
+                                    <label className="text-[10px] font-black text-foreground uppercase tracking-[0.4em]">Turnaround Scale</label>
+                                    <span className={`px-2 py-1 rounded-lg text-[10px] font-black border tracking-widest ${billingData.turnaroundDays <= 1 ? 'bg-rose-500 text-white border-rose-600 animate-pulse' : 'bg-muted text-muted-foreground border-border'}`}>
+                                        {billingData.turnaroundDays === 0 ? 'IMMEDIATE (0-DAY)' : billingData.turnaroundDays === 10 ? 'REGULAR (10-DAY)' : `${billingData.turnaroundDays}-DAY EXPEDITE`}
+                                    </span>
+                                </div>
+                                <div className="px-2">
+                                   <input 
+                                     type="range" min="0" max="10" step="1" 
+                                     value={billingData.turnaroundDays} 
+                                     onChange={(e) => setBillingData({...billingData, turnaroundDays: parseInt(e.target.value)})}
+                                     className="w-full accent-primary h-2 bg-muted rounded-full appearance-none cursor-pointer"
+                                   />
+                                   <div className="flex justify-between mt-2 px-1 text-[8px] font-black text-muted-foreground uppercase">
+                                      <span>Immediate</span>
+                                      <span>Standard</span>
+                                   </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black ml-2 text-muted-foreground uppercase tracking-widest">Page Count</label>
+                                    <input type="number" value={billingData.pages} onChange={(e) => setBillingData({...billingData, pages: parseInt(e.target.value) || 0})} className="w-full px-6 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black ml-2 text-muted-foreground uppercase tracking-widest">Addl. Copies</label>
+                                    <input type="number" value={billingData.additionalCopies} onChange={(e) => setBillingData({...billingData, additionalCopies: parseInt(e.target.value) || 0})} className="w-full px-6 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
+                                </div>
+                            </div>
+
+                            <div className="bg-muted/30 rounded-[2rem] p-6 border border-border grid grid-cols-2 gap-4">
+                                <CheckboxItem label="Rough Draft" checked={billingData.hasRough} onChange={(v) => setBillingData({ ...billingData, hasRough: v })} />
+                                <CheckboxItem label="Videography" checked={billingData.hasVideographer} onChange={(v) => setBillingData({ ...billingData, hasVideographer: v })} />
+                                <CheckboxItem label="Interpreter" checked={billingData.hasInterpreter} onChange={(v) => setBillingData({ ...billingData, hasInterpreter: v })} />
+                                <CheckboxItem label="Expert Witness" checked={billingData.hasExpert} onChange={(v) => setBillingData({ ...billingData, hasExpert: v })} />
+                                <CheckboxItem label="CART Services" checked={billingData.hasCart} onChange={(v) => setBillingData({ ...billingData, hasCart: v })} />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[8px] font-black ml-2 text-muted-foreground uppercase">Afterhours (Hrs)</label>
+                                    <input type="number" value={billingData.afterHoursCount} onChange={(e) => setBillingData({...billingData, afterHoursCount: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-muted/50 border border-border font-black text-center" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[8px] font-black ml-2 text-muted-foreground uppercase">Wait Time (Hrs)</label>
+                                    <input type="number" value={billingData.waitTimeCount} onChange={(e) => setBillingData({...billingData, waitTimeCount: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-muted/50 border border-border font-black text-center" />
+                                </div>
+                            </div>
+
+                            <div className="bg-card rounded-[2rem] p-6 border border-border space-y-4">
+                                <label className="text-[10px] font-black uppercase tracking-[0.4em] ml-2">Manual Dollar Overrides</label>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <OverrideField label="Page" value={billingData.overrides?.pageRate} onChange={(v) => setBillingData({ ...billingData, overrides: { ...billingData.overrides, pageRate: v } })} />
+                                    <OverrideField label="Appr" value={billingData.overrides?.appearanceFee} onChange={(v) => setBillingData({ ...billingData, overrides: { ...billingData.overrides, appearanceFee: v } })} />
+                                    <OverrideField label="Min" value={billingData.overrides?.minimumFee} onChange={(v) => setBillingData({ ...billingData, overrides: { ...billingData.overrides, minimumFee: v } })} />
+                                    <OverrideField label="CART" value={billingData.overrides?.cartRate} onChange={(v) => setBillingData({ ...billingData, overrides: { ...billingData.overrides, cartRate: v } })} />
+                                </div>
+                            </div>
+
+                            <div className="bg-foreground/5 rounded-[1.5rem] sm:rounded-[2.5rem] p-6 sm:p-8 border border-foreground/10 space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <Zap className="h-4 w-4 text-primary animate-pulse" />
+                                    <span className="text-[10px] font-black uppercase tracking-[0.4em]">Calculation Matrix</span>
+                                </div>
+                                <div className="space-y-2">
                                     {calculation.breakdown.map((item, idx) => (
-                                        <div key={idx} className="flex justify-between items-center group">
+                                        <div key={idx} className="flex justify-between items-center text-[10px] font-black">
                                             <div className="flex flex-col">
-                                                <span className="text-[8px] sm:text-[10px] font-black text-muted-foreground uppercase tracking-widest leading-none">{item.label}</span>
-                                                <span className="text-[7px] sm:text-[8px] font-bold text-muted-foreground/50 uppercase tracking-widest mt-1 group-hover:text-primary transition-colors">{item.detail}</span>
+                                                <span className="text-muted-foreground uppercase">{item.label}</span>
+                                                <span className="text-[7px] text-muted-foreground/50 lowercase italic tracking-widest">{item.detail}</span>
                                             </div>
-                                            <span className="text-xs sm:text-sm font-black text-foreground tracking-tighter">${item.value.toFixed(2)}</span>
+                                            <span className="text-foreground tracking-tighter">${item.value.toFixed(2)}</span>
                                         </div>
                                     ))}
                                 </div>
-
-                                <div className="pt-4 sm:pt-6 border-t border-foreground/10 flex justify-between items-end">
-                                    <div>
-                                        <p className="text-[7px] sm:text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-0.5 opacity-50">Operational Sum</p>
-                                        <p className="text-2xl sm:text-4xl font-black text-foreground tracking-tighter leading-none">${calculation.total.toFixed(2)}</p>
+                                <div className="pt-4 border-t border-foreground/10 flex justify-between items-end">
+                                    <div className="space-y-1">
+                                       <p className="text-[7px] font-black text-muted-foreground uppercase tracking-widest opacity-50">Operational Sum</p>
+                                       <p className="text-3xl font-black text-foreground tracking-tighter">${calculation.total.toFixed(2)}</p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.1em] leading-none">Net 14</p>
-                                    </div>
+                                    <div className="text-[8px] font-black text-muted-foreground uppercase tracking-widest border border-border px-2 py-1 rounded">Net 14</div>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Modal Actions */}
-                        <div className="mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-border flex flex-col gap-3 sm:gap-4 flex-shrink-0">
-                            {error && (
-                                <div className="px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-500 text-[8px] sm:text-[10px] font-black uppercase tracking-widest text-center">
-                                    {error}
-                                </div>
-                            )}
-                            <div className="flex flex-row items-center gap-3 sm:gap-5">
-                                <button
-                                    onClick={() => {
-                                        setShowCompleteModal(false)
-                                        setError(null)
-                                        setCompletedInvoiceId(null)
-                                    }}
-                                    className="flex-1 py-3 sm:py-5 px-4 sm:px-8 rounded-xl sm:rounded-2xl bg-muted border border-border text-muted-foreground font-black uppercase text-[8px] sm:text-[10px] tracking-[0.2em] sm:tracking-[0.3em] hover:text-foreground transition-all"
-                                >
-                                    {completedInvoiceId ? 'Close' : 'Abort'}
-                                </button>
+                        <div className="mt-8 flex flex-col gap-4">
+                            {error && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-[8px] font-black uppercase text-center rounded-xl">{error}</div>}
+                            <div className="flex gap-4">
+                                <button onClick={() => setShowCompleteModal(false)} className="flex-1 py-4 rounded-2xl bg-muted border border-border text-[10px] font-black uppercase tracking-widest">{completedInvoiceId ? 'Close' : 'Abort'}</button>
                                 {completedInvoiceId ? (
-                                    <Link
-                                        href={`/admin/invoices/${completedInvoiceId}`}
-                                        className="luxury-button flex-[2] py-3 sm:py-5 px-6 sm:px-10 shadow-3xl h-auto bg-emerald-600 text-center"
-                                    >
-                                        <span className="uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[8px] sm:text-[10px] font-black text-white">View Final Invoice</span>
-                                    </Link>
+                                    <Link href={`/admin/invoices/${completedInvoiceId}`} className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest text-center shadow-xl">View Final Invoice</Link>
                                 ) : (
-                                    <button
-                                        onClick={() => handleComplete(selectedBookingId!)}
-                                        className="luxury-button flex-[2] py-3 sm:py-5 px-6 sm:px-10 shadow-3xl h-auto"
-                                    >
-                                        <span className="uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[8px] sm:text-[10px] font-black">Generate Invoice</span>
-                                    </button>
+                                    <button onClick={() => handleComplete(selectedBookingId!)} className="flex-[2] py-4 rounded-2xl bg-foreground text-background text-[10px] font-black uppercase tracking-widest shadow-xl">Generate Invoice</button>
                                 )}
                             </div>
                         </div>
@@ -1020,114 +774,83 @@ export default function BookingManagementPage() {
 
             {/* Direct Assignment Modal */}
             {showAssignModal && (
-                <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 sm:p-6 lg:pl-80 animate-in fade-in duration-300">
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setShowAssignModal(false)}></div>
-                    <div className="relative w-full max-w-xl bg-card rounded-[2.5rem] p-8 sm:p-12 shadow-3xl border border-border">
-                        <div className="flex items-center justify-between mb-10">
-                            <div>
-                                <h2 className="text-2xl font-black text-foreground uppercase tracking-tight">Direct Assignment</h2>
-                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mt-1">Choose a reporter to assign to this booking</p>
-                            </div>
-                            <button onClick={() => setShowAssignModal(false)} className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center text-muted-foreground">
-                                <X className="h-5 w-5" />
-                            </button>
+                <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setShowAssignModal(false)} />
+                    <div className="relative w-full max-w-xl bg-card rounded-[2.5rem] p-8 border border-border shadow-3xl">
+                        <div className="flex items-center justify-between mb-8">
+                            <h2 className="text-xl font-black uppercase tracking-tight">Direct Assignment</h2>
+                            <button onClick={() => setShowAssignModal(false)} className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground"><X /></button>
                         </div>
-                        {currentUser && (
-                            <button
-                                onClick={() => handleAssignReporter(currentUser.id)}
-                                className="w-full mb-6 p-4 rounded-2xl bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-[0.25em] hover:opacity-90 transition"
-                            >
-                                Assign Job to Myself
-                            </button>
-                        )}
                         <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                            {reporters.length === 0 ? (
-                                <p className="text-center py-10 text-muted-foreground font-black uppercase text-[10px]">No operatives found in registry</p>
-                            ) : reporters.map(r => (
-                                <button
-                                    key={r.id}
-                                    onClick={() => handleAssignReporter(r.id)}
-                                    className="w-full p-6 rounded-[2rem] bg-muted/30 border border-border flex items-center justify-between hover:bg-primary/10 hover:border-primary/20 transition-all text-left group"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-black text-xs group-hover:bg-primary group-hover:text-primary-foreground transition-all">
-                                            {r.firstName[0]}{r.lastName[0]}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-black text-foreground uppercase tracking-tight">{r.firstName} {r.lastName}</p>
-                                            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">{r.certification || 'Verified Operative'}</p>
-                                        </div>
-                                    </div>
-                                    <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
-                                </button>
-                            ))}
+                           {currentUser && (
+                               <button onClick={() => handleAssignReporter(currentUser.id)} className="w-full p-4 rounded-2xl bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest">Assign to Myself</button>
+                           )}
+                           {reporters.map(r => (
+                               <button key={r.id} onClick={() => handleAssignReporter(r.id)} className="w-full p-5 rounded-2xl bg-muted/30 border border-border flex items-center justify-between hover:bg-primary/5 transition-all group">
+                                   <div className="flex items-center gap-4">
+                                       <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-black">{r.firstName[0]}{r.lastName[0]}</div>
+                                       <div>
+                                           <p className="text-sm font-black uppercase tracking-tight">{r.firstName} {r.lastName}</p>
+                                           <p className="text-[8px] text-muted-foreground uppercase font-bold tracking-widest">{r.certification || 'Verified Operative'}</p>
+                                       </div>
+                                   </div>
+                                   <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-all" />
+                               </button>
+                           ))}
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Add-On Note Modal */}
+            {/* Simple Review Modal */}
+            {showReviewModal && reviewBooking && (
+                <div className="fixed inset-0 z-[260] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-background/80 backdrop-blur-lg" onClick={() => setShowReviewModal(false)} />
+                    <div className="relative w-full max-w-lg bg-card rounded-[2rem] border border-border shadow-3xl p-8 space-y-6">
+                        <h2 className="text-xl font-black uppercase tracking-tight">Approve Operative Signal</h2>
+                        <div className="p-4 bg-muted/40 rounded-2xl space-y-2 text-[10px] font-black uppercase tracking-widest">
+                            <p className="text-muted-foreground">ID: {reviewBooking.bookingNumber}</p>
+                            <p className="text-foreground">Type: {reviewBooking.proceedingType}</p>
+                            <p className="text-foreground">Client: {reviewBooking.contact.companyName}</p>
+                        </div>
+                        <div className="flex gap-4">
+                            <button onClick={confirmReviewApproval} className="flex-1 py-3 bg-primary text-primary-foreground rounded-2xl font-black uppercase text-[10px] tracking-widest">Confirm & Approve</button>
+                            <button onClick={() => setShowReviewModal(false)} className="flex-1 py-3 bg-muted rounded-2xl font-black uppercase text-[10px] tracking-widest">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add-On Modal */}
             {showAddonModal && (
-                <div className="fixed inset-0 z-[210] flex items-center justify-center p-4 sm:p-6 lg:pl-80 animate-in fade-in duration-200">
+                <div className="fixed inset-0 z-[210] flex items-center justify-center p-4 animate-in fade-in duration-200">
                     <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setShowAddonModal(false)} />
-                    <div className="relative w-full max-w-xl bg-card rounded-[1.75rem] p-6 sm:p-8 shadow-3xl border border-border">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-sm font-black text-foreground uppercase tracking-tight">Add-On Note</h3>
-                                <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">From client request</p>
-                            </div>
-                            <button onClick={() => setShowAddonModal(false)} className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-all">
-                                <X className="h-4 w-4" />
-                            </button>
-                        </div>
-                        <div className="p-4 rounded-2xl bg-muted/40 border border-border text-sm whitespace-pre-wrap leading-relaxed">
-                            {addonText || 'No add-on details provided.'}
-                        </div>
-                        <div className="flex justify-end mt-4">
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setShowAddonModal(false)}
-                                    className="px-4 py-2 rounded-xl bg-muted text-foreground border border-border text-[10px] font-black uppercase tracking-widest"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    disabled={addonSaving}
-                                    onClick={async () => {
-                                        if (!selectedBookingId) return
-                                        setAddonSaving(true)
-                                        try {
-                                            const token = localStorage.getItem('token')
-                                            await fetch(`/api/bookings/${selectedBookingId}`, {
-                                                method: 'PATCH',
-                                                headers: {
-                                                    'Content-Type': 'application/json',
-                                                    'Authorization': `Bearer ${token}`
-                                                },
-                                                body: JSON.stringify({ specialRequirements: addonText })
-                                            })
-                                            // Put text into billing draft and open complete modal
-                                            setBillingData(prev => ({
-                                                ...prev,
-                                                notes: addonText,
-                                            }) as any)
-                                            setShowAddonModal(false)
-                                            fetchBookings()
-                                            setCompletedInvoiceId(null)
-                                            setShowCompleteModal(true)
-                                            // Trigger header notification refresh
-                                            window.dispatchEvent(new Event('admin-notifications-refresh'))
-                                        } catch (err) {
-                                            console.error('Accept add-on failed', err)
-                                        } finally {
-                                            setAddonSaving(false)
-                                        }
-                                    }}
-                                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest shadow-lg disabled:opacity-60"
-                                >
-                                    {addonSaving ? 'Processing...' : 'Accept & Add to Invoice'}
-                                </button>
-                            </div>
+                    <div className="relative w-full max-w-xl bg-card rounded-[1.75rem] p-8 border border-border shadow-3xl">
+                        <h3 className="text-sm font-black uppercase tracking-tight mb-4 text-foreground">Operational Add-On Signal</h3>
+                        <div className="p-4 bg-muted/40 border border-border rounded-2xl text-xs leading-relaxed mb-6 italic">{addonText || 'No specific signal data detected.'}</div>
+                        <div className="flex gap-2 justify-end">
+                            <button onClick={() => setShowAddonModal(false)} className="px-4 py-2 rounded-xl bg-muted text-[10px] font-black uppercase tracking-widest">Ignore</button>
+                            <button 
+                                onClick={async () => {
+                                    if (!selectedBookingId) return
+                                    setAddonSaving(true)
+                                    try {
+                                        const token = localStorage.getItem('token')
+                                        await fetch(`/api/bookings/${selectedBookingId}`, {
+                                            method: 'PATCH',
+                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                            body: JSON.stringify({ specialRequirements: addonText })
+                                        })
+                                        setBillingData(prev => ({ ...prev, notes: addonText }) as any)
+                                        setShowAddonModal(false)
+                                        fetchBookings()
+                                        setShowCompleteModal(true)
+                                    } finally {
+                                        setAddonSaving(false)
+                                    }
+                                }}
+                                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest"
+                            >Accept & Bill</button>
                         </div>
                     </div>
                 </div>
@@ -1136,17 +859,28 @@ export default function BookingManagementPage() {
     )
 }
 
+function OverrideField({ label, value, onChange }: { label: string, value: number | undefined, onChange: (v: number | undefined) => void }) {
+    return (
+        <div className="space-y-1">
+            <label className="text-[7px] font-black text-muted-foreground uppercase ml-1">{label}</label>
+            <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black opacity-40">$</span>
+                <input
+                    type="number" step="0.01" placeholder="Auto"
+                    className="w-full pl-5 pr-2 py-1.5 rounded-lg bg-muted border border-border text-[10px] font-black outline-none focus:border-primary/50 transition-all"
+                    value={value ?? ''}
+                    onChange={(e) => onChange(e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                />
+            </div>
+        </div>
+    )
+}
+
 function FilterTab({ label, count, active, onClick }: any) {
     return (
-        <button
-            onClick={onClick}
-            className={`flex items-center gap-3 px-5 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest whitespace-nowrap transition-all border ${active
-                ? 'bg-primary text-primary-foreground shadow-xl shadow-primary/30 border-primary'
-                : 'bg-card text-muted-foreground border-border hover:border-primary/20 hover:text-foreground'
-                }`}
-        >
+        <button onClick={onClick} className={`flex items-center gap-3 px-5 py-3 rounded-xl font-black text-[9px] uppercase tracking-widest whitespace-nowrap transition-all border ${active ? 'bg-primary text-primary-foreground border-primary shadow-xl shadow-primary/30' : 'bg-card text-muted-foreground border-border hover:border-primary/20 hover:text-foreground'}`}>
             {label}
-            <span className={`px-2 py-0.5 rounded-md text-[8px] ${active ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground group-hover:bg-primary/5'}`}>{count}</span>
+            <span className={`px-2 py-0.5 rounded-md text-[8px] ${active ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>{count}</span>
         </button>
     )
 }
@@ -1154,29 +888,17 @@ function FilterTab({ label, count, active, onClick }: any) {
 function CheckboxItem({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) {
     return (
         <label className="flex items-center gap-3 cursor-pointer group">
-            <div
-                className={`h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all duration-300 ${checked ? 'bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/20 scale-105' : 'border-border bg-card group-hover:border-primary/50'}`}
-                onClick={(e) => { e.preventDefault(); onChange(!checked); }}
-            >
+            <div className={`h-6 w-6 rounded-lg border-2 flex items-center justify-center transition-all ${checked ? 'bg-primary border-primary text-primary-foreground' : 'border-border bg-card'}`} onClick={(e) => { e.preventDefault(); onChange(!checked); }}>
                 {checked && <CheckCircle2 className="h-4 w-4" />}
             </div>
-            <span className={`text-[9px] font-black uppercase tracking-widest transition-colors ${checked ? 'text-foreground' : 'text-muted-foreground group-hover:text-primary'}`}>{label}</span>
+            <span className={`text-[9px] font-black uppercase tracking-widest ${checked ? 'text-foreground' : 'text-muted-foreground'}`}>{label}</span>
         </label>
     )
 }
 
 function Activity({ className }: { className?: string }) {
     return (
-        <svg
-            className={className}
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
+        <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
     )

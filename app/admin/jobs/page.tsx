@@ -50,7 +50,7 @@ export default function AdministrativeJobNexus() {
     const [formData, setFormData] = useState({
         contactId: '',
         serviceId: '',
-        proceedingType: 'Deposition',
+        proceedingType: '',
         bookingDate: '',
         bookingTime: '09:00',
         location: '',
@@ -189,7 +189,7 @@ export default function AdministrativeJobNexus() {
                 setFormData({
                     contactId: '',
                     serviceId: '',
-                    proceedingType: 'Deposition',
+                    proceedingType: '',
                     bookingDate: '',
                     bookingTime: '09:00',
                     location: '',
@@ -572,12 +572,16 @@ function JobModal({ title, onClose, onSubmit, saving, data, setData, contacts, s
                             {contacts.map((c: any) => <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>)}
                         </select>
                         <select className="luxury-input h-14" value={data.serviceId} onChange={e => setData({ ...data, serviceId: e.target.value })} required>
-                            <option value="">Select Service</option>
+                            <option value="">Select Service Portfolio</option>
                             {services.map((s: any) => <option key={s.id} value={s.id}>{s.serviceName}</option>)}
                         </select>
                     </div>
                     <div className="grid grid-cols-2 gap-6">
-                        <input className="luxury-input h-14" placeholder="Proceeding (e.g. Deposition)" value={data.proceedingType} onChange={e => setData({ ...data, proceedingType: e.target.value })} required />
+                        <select className="luxury-input h-14 font-extrabold" value={data.proceedingType} onChange={e => setData({ ...data, proceedingType: e.target.value })} required>
+                            <option value="">Select Proceeding Protocol</option>
+                            {services.map((s: any) => <option key={s.id} value={s.serviceName.toUpperCase()}>{s.serviceName}</option>)}
+                            <option value="OTHER">OTHER</option>
+                        </select>
                         <select className="luxury-input h-14" value={data.appearanceType} onChange={e => setData({ ...data, appearanceType: e.target.value })}>
                             <option value="REMOTE">REMOTE</option>
                             <option value="IN_PERSON">IN_PERSON</option>
@@ -671,4 +675,3 @@ function EditModal({ title, onClose, onSubmit, saving, data, setData, reporters 
         </div>
     )
 }
-

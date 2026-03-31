@@ -56,7 +56,7 @@ export class BookingRulesService {
 
     /**
      * 4.2 Auto-Generate Cancellation Invoice
-     * Creates $400 minimum invoice for late cancellations
+     * Creates late cancellation fee invoice
      */
     static async generateCancellationInvoice(bookingId: string, options?: { feeAmount?: number }): Promise<any> {
         const booking = await prisma.booking.findUnique({
@@ -128,7 +128,6 @@ export class BookingRulesService {
 
     /**
      * 4.3 Legal Confirmation - Validate Confirmation
-     * Ensures all three confirmations are checked
      */
     static validateConfirmation(confirmation: {
         confirmedScheduling: boolean
@@ -157,7 +156,6 @@ export class BookingRulesService {
 
     /**
      * 4.3 Legal Confirmation - Create Confirmation Record
-     * Stores timestamped confirmation with IP and user agent
      */
     static async createConfirmation(data: {
         bookingId: string
@@ -210,7 +208,6 @@ export class BookingRulesService {
 
     /**
      * Get Confirmation Terms Text
-     * Returns the legal text that clients must agree to
      */
     static getConfirmationTerms(booking: {
         bookingNumber: string
@@ -331,11 +328,11 @@ I understand that this confirmation creates a legally binding agreement between 
         const clientType = booking.contact?.clientType?.toUpperCase() || 'PRIVATE'
         if (clientType === 'AGENCY') {
             const keywordTarget = `${booking.proceedingType ?? ''} ${booking.service?.serviceName ?? ''}`.toUpperCase()
-            const isHighTier = /(ARBITRATION|HEARING|REALTIME)/.test(keywordTarget)
+            const isHighTier = /(ARBITRATION\/HEARINGS|HEARING|REALTIME)/.test(keywordTarget)
             const amount = isHighTier ? AGENCY_HIGH_CANCELLATION_FEE : AGENCY_OTHER_CANCELLATION_FEE
             const label = `$${amount.toFixed(0)} Cancellation Minimum`
             const policy = isHighTier
-                ? 'Arbitrations, hearings, and realtime proceedings carry a $400 minimum cancellation fee after the deadline.'
+                ? 'Arbitration/Hearings, hearings, and realtime proceedings carry a $400 minimum cancellation fee after the deadline.'
                 : 'Other proceedings carry a $300 minimum cancellation fee after the deadline.'
             return { amount, label, policy }
         }

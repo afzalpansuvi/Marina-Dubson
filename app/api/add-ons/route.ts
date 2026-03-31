@@ -14,9 +14,46 @@ const addOnSchema = z.object({
 
 export async function GET() {
   try {
-    const options = await prisma.addOnOption.findMany({
+    let options = await prisma.addOnOption.findMany({
       orderBy: [{ category: 'asc' }, { label: 'asc' }]
     })
+
+    // Auto-seed if empty
+    if (options.length === 0) {
+      const defaultAddOns = [
+        {
+          label: 'Rough Draft',
+          value: 'ROUGH_DRAFT',
+          category: 'ADD_ON' as any,
+          description: 'Same-day unedited transcript for immediate review.'
+        },
+        {
+          label: 'Real-Time Streaming',
+          value: 'REAL_TIME',
+          category: 'ADD_ON' as any,
+          description: 'Live verbatim feed delivered directly to your devices during the proceeding.'
+        },
+        {
+          label: 'CART Services',
+          value: 'CART_SERVICES',
+          category: 'ADD_ON' as any,
+          description: 'Communication Access Real-Time Translation for accessibility compliance.'
+        }
+      ]
+
+      for (const addon of defaultAddOns) {
+        await prisma.addOnOption.upsert({
+          where: { value: addon.value },
+          update: addon,
+          create: addon
+        })
+      }
+
+      options = await prisma.addOnOption.findMany({
+        orderBy: [{ category: 'asc' }, { label: 'asc' }]
+      })
+    }
+
     return NextResponse.json({ options })
   } catch (error) {
     console.error('Fetch add-on options error:', error)

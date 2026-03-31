@@ -96,7 +96,7 @@ export default function ClientPortal() {
     const defaultFinancial = isAgencyClient ? 45 : 30
     const financialResponsibilityDays = Number(systemPolicy[financialKey]) || defaultFinancial
     const defaultSummary = isAgencyClient
-        ? 'Arbitrations, hearings, and realtime proceedings carry a $400 cancellation minimum after the deadline; other proceedings carry a $300 minimum.'
+        ? 'Arbitration/Hearings, hearings, and realtime proceedings carry a $400 cancellation minimum after the deadline; other proceedings carry a $300 minimum.'
         : 'Cancellations between 3:00 PM and 6:00 PM on the previous business day incur a $300 fee; cancellations after 6:00 PM up until the job day incur a $400 fee.'
     const cancellationSummaryText = systemPolicy.cancellation_policy_text || defaultSummary
     const paymentTermsChoice = systemPolicy.payment_terms_choice || '30'
@@ -561,7 +561,7 @@ export default function ClientPortal() {
                                         <ActivityRow
                                             key={booking.id}
                                             id={booking.bookingNumber}
-                                            title={`${booking.proceedingType} — ${booking.service?.serviceName ?? ''}`}
+                                            title={booking.service?.serviceName || booking.proceedingType}
                                             date={format(new Date(booking.bookingDate), 'MMM d, yyyy')}
                                             status={booking.bookingStatus}
                                             reporter={booking.reporter}
@@ -615,7 +615,7 @@ export default function ClientPortal() {
                                             <div>
                                                 <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">{booking.bookingNumber}</p>
                                                 <h4 className="text-lg font-black text-foreground group-hover:text-primary transition-colors uppercase tracking-tight">
-                                                    {booking.proceedingType}
+                                                    {booking.service?.serviceName || booking.proceedingType}
                                                 </h4>
                                                 <p className="text-xs font-medium text-muted-foreground">{format(new Date(booking.bookingDate), 'EEEE, MMMM dd, yyyy')}</p>
                                                 {booking.reporter && (
@@ -859,7 +859,7 @@ export default function ClientPortal() {
                                                 <div>
                                                     <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1">{invoice.invoiceNumber}</p>
                                                     <h4 className="text-lg font-black text-foreground group-hover:text-primary transition-colors uppercase tracking-tight">
-                                                        {invoice.booking?.proceedingType || 'Services Rendering'}
+                                                        {invoice.booking?.service?.serviceName || invoice.booking?.proceedingType || 'Services Rendering'}
                                                     </h4>
                                                     <p className="text-xs font-medium text-muted-foreground">Issued: {format(new Date(invoice.invoiceDate), 'MMM dd, yyyy')}</p>
                                                 </div>
@@ -953,7 +953,6 @@ export default function ClientPortal() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 {services
                                     .filter(s => s.active)
-                                    .filter(s => ['Premium Court Reporting', 'CART Services (Communication Access Real-Time Translation)'].includes(s.serviceName))
                                     .map(service => (
                                     <button
                                         key={service.id}

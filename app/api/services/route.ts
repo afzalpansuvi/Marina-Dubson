@@ -6,7 +6,7 @@ import { z } from 'zod'
 const serviceSchema = z.object({
     serviceName: z.string().min(1),
     category: z.enum(['COURT_REPORTING', 'ACCESSIBILITY']),
-    subService: z.enum(['DEPOSITION', 'ARBITRATION_MEDIATION', 'EXAMINATION_UNDER_OATH', 'CART', 'OTHER']),
+    subService: z.enum(['DEPOSITION', 'ARBITRATION_HEARINGS', 'HEARING', 'EUO', 'CART', 'OTHER']),
     defaultMinimumFee: z.number().default(400),
     pageRate: z.number(),
     appearanceFeeRemote: z.number(),
@@ -20,10 +20,19 @@ const serviceSchema = z.object({
     active: z.boolean().default(true),
 })
 
+// Requirement 7 order
+const confirmedOrder = [
+    'Deposition',
+    'Arbitration/Hearings',
+    'Hearing',
+    'Examinations Under Oath',
+    'CART',
+    'Other'
+]
+
 // GET all services
 export async function GET(request: NextRequest) {
     try {
-        // Public access allowed for listing services (Requirement 6.1 redaction will apply)
         const token = extractTokenFromHeader(request.headers.get('Authorization'))
         const payload = token ? verifyToken(token) : null
 
@@ -35,9 +44,73 @@ export async function GET(request: NextRequest) {
         if (category) where.category = category
         if (active !== null) where.active = active === 'true'
 
-        const services = await prisma.service.findMany({
+        let services = await prisma.service.findMany({
             where,
             orderBy: { serviceName: 'asc' },
+        })
+
+        // Auto-seed if empty (and no filters applied)
+        if (services.length === 0 && !category && (active === null)) {
+            const defaultServices = [
+                {
+                    serviceName: 'Deposition',
+                    category: 'COURT_REPORTING' as any,
+                    subService: 'DEPOSITION' as any,
+                    defaultMinimumFee: 400,
+                    pageRate: 4.25,
+                    appearanceFeeRemote: 350,
+                    appearanceFeeInPerson: 400,
+                    realtimeFee: 1.5,
+                    expediteImmediate: 1.25,
+                    expedite1Day: 1.10,
+                    expedite2Day: 1.00,
+                    expedite3Day: 0.90,
+                    description: 'Certified stenographic reporting for standard depositions.',
+                    active: true,
+                },
+                {
+                    serviceName: 'Arbitration/Hearings',
+                    category: 'COURT_REPORTING' as any,
+                    subService: 'ARBITRATION_HEARINGS' as any,
+                    defaultMinimumFee: 500,
+                    pageRate: 6.25,
+                    appearanceFeeRemote: 300,
+                    appearanceFeeInPerson: 300,
+                    realtimeFee: 2.5,
+                    expediteImmediate: 1.25,
+                    expedite1Day: 1.10,
+                    expedite2Day: 1.00,
+                    expedite3Day: 0.90,
+                    description: 'Specialized stenographic support for arbitrations and detailed hearings.',
+                    active: true,
+                }
+            ]
+
+            for (const s of defaultServices) {
+                await prisma.service.upsert({
+                    where: { id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-') },
+                    update: s,
+                    create: {
+                        id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-'),
+                        ...s
+                    } as any
+                })
+            }
+
+            services = await prisma.service.findMany({
+                where,
+                orderBy: { serviceName: 'asc' },
+            })
+        }
+
+        // Apply mandatory sorting per Requirement 7
+        services.sort((a, b) => {
+            const indexA = confirmedOrder.indexOf(a.serviceName)
+            const indexB = confirmedOrder.indexOf(b.serviceName)
+            if (indexA === -1 && indexB === -1) return a.serviceName.localeCompare(b.serviceName)
+            if (indexA === -1) return 1
+            if (indexB === -1) return -1
+            return indexA - indexB
         })
 
         // Redact pricing for non-admin/staff
@@ -52,7 +125,6 @@ export async function GET(request: NextRequest) {
                 active: s.active,
                 createdAt: s.createdAt,
                 updatedAt: s.updatedAt,
-                // Pricing fields redacted as per Requirement 6.1
                 pageRate: 'REDACTED',
                 appearanceFeeRemote: 'REDACTED',
                 appearanceFeeInPerson: 'REDACTED',
@@ -63,10 +135,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ services: resultServices })
     } catch (error) {
         console.error('Get services error:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }
 
@@ -89,16 +158,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(service, { status: 201 })
     } catch (error) {
         if (error instanceof z.ZodError) {
-            return NextResponse.json(
-                { error: 'Invalid input', details: error.errors },
-                { status: 400 }
-            )
+            return NextResponse.json({ error: 'Invalid input', details: error.errors }, { status: 400 })
         }
-
         console.error('Create service error:', error)
-        return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-        )
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

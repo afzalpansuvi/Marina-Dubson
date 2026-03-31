@@ -86,6 +86,20 @@ model Service {
   expedite3Day          Float
   description           String?
   active                Boolean   @default(true)
+
+  // Private Client Rate Tier (Overrides)
+  privateMinimumFee     Float?
+  privatePageRate       Float?
+  privateAppearanceFeeRemote   Float?
+  privateAppearanceFeeInPerson Float?
+  privateRealtimeFee           Float?
+  privateRoughRate              Float?
+  privateCopyRate               Float?
+  privateWaitTimeRate           Float?
+  privateAfterHoursRate         Float?
+  privateExpediteBase           Float? // The base percentage or multiplier for expedite calculations
+
+
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
   bookings              Booking[]
@@ -214,10 +228,12 @@ model Invoice {
   waitTimeCount    Int?
   cancellationFee  Float?
   minimumFee       Float     @default(400)
+  cartFee          Float?
   subtotal         Float
   tax              Float     @default(0)
   total            Float
   notes            String?
+  rateTier         String    @default("STANDARD") // STANDARD or PRIVATE
   paidAt           DateTime?
   paymentMethod    String?
   stripePaymentId  String?

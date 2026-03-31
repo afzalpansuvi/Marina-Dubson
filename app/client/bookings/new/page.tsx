@@ -17,50 +17,37 @@ import {
     Download,
     Search,
     ChevronRight,
+    ChevronLeft,
     Globe,
     Briefcase,
     Zap,
-    Loader2
+    Loader2,
+    MapPin
 } from 'lucide-react'
 
-const defaultAddOnOptions = [
-    { label: 'Rough Draft', value: 'ROUGH_DRAFT' },
-    { label: 'Videographer', value: 'VIDEOGRAPHER' },
-    { label: 'Realtime Sync', value: 'REALTIME_SYNC' },
-    { label: 'Interpreter', value: 'INTERPRETER' }
-]
-
-const defaultExpediteOptions = [
-    { label: 'Immediate', value: 'IMMEDIATE' },
-    ...Array.from({ length: 9 }, (_, i) => ({
-        label: `${i + 1} business day${i === 0 ? '' : 's'}`,
-        value: `${i + 1}`
-    })),
-    { label: '10 days (Regular delivery)', value: '10' }
-]
+// Requirement 10 & 18: Expedite labels are now fetched from DB for real-time sync.
 
 export default function NewBookingPage() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const requestedServiceId = searchParams.get('serviceId')
     const [step, setStep] = useState(1)
-    const dateInputRef = useRef<HTMLInputElement>(null)
-    const timeInputRef = useRef<HTMLInputElement>(null)
     const [services, setServices] = useState<any[]>([])
     const [loading, setLoading] = useState(false)
     const [addOnOptions, setAddOnOptions] = useState<any[]>([])
+    const [isExpediteChecked, setIsExpediteChecked] = useState(false)
+
     const [formData, setFormData] = useState({
         serviceId: '',
-        proceedingType: 'DEPOSITION',
-        customProceeding: '',
+        proceedingType: '',
         bookingDate: '',
-        bookingTime: '',
+        bookingTime: '09:00',
         appearanceType: 'REMOTE' as 'REMOTE' | 'IN_PERSON',
-        state: 'NY',
+        location: '',
         jurisdiction: '',
         specialRequirements: '',
         addOns: {
-            expedite: '',
+            expedite: '', // This will hold the turnaround value if checked
         },
         selectedAddOns: [] as string[],
         otherAddOnNotes: ''
@@ -70,24 +57,15 @@ export default function NewBookingPage() {
         const fetchServices = async () => {
             try {
                 const token = localStorage.getItem('token')
-                if (!token) {
-                    console.error('No authorization token found')
-                    return
-                }
+                if (!token) return
 
                 const res = await fetch('/api/services', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 })
 
                 if (res.ok) {
                     const data = await res.json()
                     const servicesList = Array.isArray(data.services) ? data.services : []
-                        .filter((s: any) =>
-                            ['Premium Court Reporting', 'CART Services (Communication Access Real-Time Translation)']
-                                .includes(s.serviceName)
-                        )
                     setServices(servicesList)
                     if (servicesList.length > 0) {
                         const requested = servicesList.find((s: any) => s.id === requestedServiceId)
@@ -95,18 +73,12 @@ export default function NewBookingPage() {
                         setFormData(prev => ({
                             ...prev,
                             serviceId: chosen.id,
-                            proceedingType: chosen.serviceName === 'Premium Court Reporting'
-                                ? 'DEPOSITION'
-                                : 'OTHER'
+                            proceedingType: chosen.serviceName.toUpperCase()
                         }))
                     }
-                } else {
-                    console.error('Failed to fetch services:', res.statusText)
-                    setServices([])
                 }
             } catch (error) {
                 console.error('Failed to fetch services:', error)
-                setServices([])
             }
         }
         fetchServices()
@@ -130,13 +102,9 @@ export default function NewBookingPage() {
         fetchOptions()
     }, [])
 
-    const selectedService = services.find(s => s.id === formData.serviceId)
-    const isCourtReporting = selectedService?.serviceName === 'Premium Court Reporting'
-    const addOnCheckboxOptions = addOnOptions.filter(o => o.category === 'ADD_ON' && o.active)
-    const expediteOptions = addOnOptions.filter(o => o.category === 'EXPEDITE' && o.active)
-    const effectiveAddOnOptions = addOnCheckboxOptions.length ? addOnCheckboxOptions : defaultAddOnOptions
-    const effectiveExpediteOptions = expediteOptions.length ? expediteOptions : defaultExpediteOptions
-    const isAddOnSelected = (value: string) => formData.selectedAddOns.includes(value)
+    const activeAddOnOptions = addOnOptions.filter(o => o.active && o.category === 'ADD_ON')
+    const displayExpediteOptions = addOnOptions.filter(o => o.active && o.category === 'EXPEDITE').sort((a, b) => parseInt(a.value) - parseInt(b.value))
+
     const toggleAddOnOption = (value: string) => {
         setFormData(prev => {
             const exists = prev.selectedAddOns.includes(value)
@@ -145,45 +113,16 @@ export default function NewBookingPage() {
         })
     }
 
-    // Ensure proceeding type stays valid for selected service
-    useEffect(() => {
-        if (isCourtReporting && !['DEPOSITION', 'ARBITRATION_MEDIATION', 'EXAMINATION_UNDER_OATH'].includes(formData.proceedingType)) {
-            setFormData(prev => ({ ...prev, proceedingType: 'DEPOSITION', customProceeding: '' }))
-        }
-        if (!isCourtReporting && formData.proceedingType !== 'OTHER') {
-            setFormData(prev => ({ ...prev, proceedingType: 'OTHER' }))
-        }
-    }, [isCourtReporting, formData.proceedingType])
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
+    const handleSubmit = async (e?: React.FormEvent) => {
+        if (e) e.preventDefault()
         setLoading(true)
         try {
-            const token = localStorage.getItem('token') // Assuming token is stored in localStorage
-            const selectedProceeding = formData.proceedingType === 'OTHER'
-                ? (formData.customProceeding.trim() || 'OTHER')
-                : formData.proceedingType
-
-            const { customProceeding, addOns, specialRequirements, selectedAddOns, otherAddOnNotes, ...rest } = formData
-
-            // Fold add-on selections into special requirements to avoid backend schema changes
-            const addOnNotes: string[] = []
-            formData.selectedAddOns.forEach(value => {
-                const option = effectiveAddOnOptions.find(o => o.value === value)
-                if (option) addOnNotes.push(`${option.label} requested`)
-            })
-            const expediteOption = effectiveExpediteOptions.find(opt => opt.value === formData.addOns.expedite)
-            if (expediteOption && formData.addOns.expedite) {
-                addOnNotes.push(`Expedite delivery: ${expediteOption.label}`)
+            const token = localStorage.getItem('token')
+            // Prepare Add-Ons: Only include expedite if checked
+            const finalAddOns = {
+                ...formData.addOns,
+                expedite: isExpediteChecked ? formData.addOns.expedite : null
             }
-            if (formData.otherAddOnNotes?.trim()) {
-                addOnNotes.push(`Other add-ons: ${formData.otherAddOnNotes.trim()}`)
-            }
-
-            const mergedSpecialRequirements = [
-                specialRequirements?.trim(),
-                addOnNotes.length ? `Add-Ons: ${addOnNotes.join('; ')}` : ''
-            ].filter(Boolean).join('\n')
 
             const res = await fetch('/api/bookings', {
                 method: 'POST',
@@ -191,362 +130,189 @@ export default function NewBookingPage() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ ...rest, proceedingType: selectedProceeding, specialRequirements: mergedSpecialRequirements }),
+                body: JSON.stringify({
+                    ...formData,
+                    addOns: finalAddOns
+                })
             })
 
             if (res.ok) {
-                setStep(3)
+                setStep(4)
             } else {
                 const err = await res.json()
-                alert(err.error || 'Failed to submit booking')
+                alert(`Booking failed: ${err.error || 'Server error'}`)
             }
         } catch (error) {
-            console.error('Submit booking failed:', error)
+            console.error('Submit error:', error)
+            alert('Failed to submit booking. Network error.')
         } finally {
             setLoading(false)
         }
     }
 
+
     return (
-        <div className="min-h-screen bg-background font-poppins text-foreground pb-20">
-            {/* Minimal High-End Header */}
-            <header className="bg-background/80 backdrop-blur-xl border-b border-border px-8 py-6 sticky top-0 z-50">
-                <div className="max-w-5xl mx-auto flex items-center justify-between">
-                    <Link href="/client/portal" className="flex items-center gap-4 group">
-                        <div className="h-10 w-10 rounded-xl bg-foreground text-background flex items-center justify-center font-black group-hover:bg-primary transition-colors">
-                            MD
+        <div className="max-w-6xl mx-auto px-6 py-12 space-y-12 pb-32 font-poppins">
+            {/* Tactical Step Indicator */}
+            <div className="flex items-center justify-center gap-8 mb-16 px-4">
+                {[1, 2, 3].map(s => (
+                    <div key={s} className="flex items-center gap-4">
+                        <button onClick={() => s < step && setStep(s)} className={`flex flex-col items-center gap-2 group transition-all ${s > step ? 'opacity-40 pointer-events-none' : ''}`}>
+                            <div className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all ${step >= s ? 'bg-primary text-white shadow-xl shadow-primary/20' : 'bg-muted text-muted-foreground'}`}>
+                                {s === 1 ? <User className="h-5 w-5" /> : s === 2 ? <MapPin className="h-5 w-5" /> : <Zap className="h-5 w-5" />}
+                            </div>
+                            <span className={`text-[8px] font-black uppercase tracking-widest ${step >= s ? 'text-foreground' : 'text-muted-foreground'}`}>Step 0{s}</span>
+                        </button>
+                        {s < 3 && <div className={`h-0.5 w-16 rounded-full ${step > s ? 'bg-primary' : 'bg-muted'}`}></div>}
+                    </div>
+                ))}
+            </div>
+
+            <div className="glass-panel rounded-[3rem] p-10 md:p-16 relative overflow-hidden bg-white border border-slate-100 shadow-3xl">
+                <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary to-indigo-600"></div>
+
+                {step === 1 && (
+                    <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Proceeding Type</label>
+                                <select className="luxury-input h-14" value={formData.serviceId} onChange={(e) => {
+                                    const serviceId = e.target.value;
+                                    const service = services.find(s => s.id === serviceId);
+                                    setFormData({ 
+                                        ...formData, 
+                                        serviceId, 
+                                        proceedingType: service?.serviceName?.toUpperCase() || '' 
+                                    });
+                                }}>
+                                    <option value="">Select Proceeding Portfolio</option>
+                                    {services.map(s => <option key={s.id} value={s.id}>{s.serviceName}</option>)}
+                                </select>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Jurisdiction / Venue</label>
+                                <input className="luxury-input h-14" placeholder="E.G. SUPREME COURT, NY COUNTY" value={formData.jurisdiction} onChange={(e) => setFormData({ ...formData, jurisdiction: e.target.value })} />
+                            </div>
                         </div>
-                        <span className="text-xs font-black uppercase tracking-widest text-muted-foreground group-hover:text-foreground transition-colors">Return to Dashboard</span>
-                    </Link>
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <ShieldAlert className="h-4 w-4 text-emerald-500" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Secure AES-256 Protocol</span>
+
+                        <div className="flex justify-end pt-10 border-t border-border/50">
+                            <button onClick={() => setStep(2)} disabled={!formData.serviceId} className="bg-primary text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-foreground hover:text-white transition-all group disabled:opacity-40">
+                                Proceed to Logistics <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+                            </button>
                         </div>
                     </div>
-                </div>
-            </header>
+                )}
 
-            <main className="max-w-4xl mx-auto px-8 py-16">
-                <div className="text-center mb-16">
-                    <h1 className="text-5xl font-black tracking-tighter uppercase mb-4">
-                        Service <span className="text-primary italic">Request</span>
-                    </h1>
-                    <p className="text-muted-foreground font-medium max-w-lg mx-auto leading-relaxed">Initiate a professional stenographic assignment with our elite NYC-based reporting network.</p>
-                </div>
-
-                {/* Progress Indicator */}
-                <div className="flex items-center justify-center gap-12 mb-16">
-                    <StepIndicator active={step >= 1} label="Identity" />
-                    <div className={`h-0.5 w-12 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-muted'}`}></div>
-                    <StepIndicator active={step >= 2} label="Details" />
-                    <div className={`h-0.5 w-12 rounded-full ${step >= 3 ? 'bg-primary' : 'bg-muted'}`}></div>
-                    <StepIndicator active={step >= 3} label="Review" />
-                </div>
-
-                <div className="glass-panel rounded-[3rem] p-10 md:p-16 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-indigo-600"></div>
-
-                    {step === 1 && (
-                        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-8 duration-500">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Jurisdiction / Venue</label>
-                                    <input
-                                        className="luxury-input"
-                                        placeholder="E.G. SUPREME COURT, NY COUNTY"
-                                        value={formData.jurisdiction}
-                                        onChange={(e) => setFormData({ ...formData, jurisdiction: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Select Service</label>
-                                    <select
-                                        className="luxury-input appearance-none bg-no-repeat"
-                                        style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M19 9l-7 7-7-7\' /%3E%3C/svg%3E")', backgroundPosition: 'right 1.5rem center', backgroundSize: '1.25rem' }}
-                                        value={formData.serviceId}
-                                        onChange={(e) => {
-                                            const nextServiceId = e.target.value
-                                            const svc = services.find(s => s.id === nextServiceId)
-                                            const nextProceeding = svc?.serviceName === 'Premium Court Reporting'
-                                                ? 'DEPOSITION'
-                                                : 'OTHER'
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                serviceId: nextServiceId,
-                                                proceedingType: nextProceeding,
-                                                customProceeding: ''
-                                            }))
-                                        }}
-                                    >
-                                        {services.map(s => (
-                                            <option key={s.id} value={s.id}>{s.serviceName}</option>
-                                        ))}
-                                    </select>
-                                    <p className="text-[9px] font-bold text-primary uppercase tracking-widest ml-2 mt-2">
-                                        CART = Communication Access Real-Time Translation
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-end">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Type of Proceeding</label>
-                                    <select
-                                        className="luxury-input"
-                                        value={formData.proceedingType}
-                                        onChange={(e) => setFormData({ ...formData, proceedingType: e.target.value })}
-                                    >
-                                        {isCourtReporting ? (
-                                            <>
-                                                <option value="DEPOSITION">Deposition</option>
-                                                <option value="ARBITRATION_MEDIATION">Arbitration / Mediation</option>
-                                                <option value="EXAMINATION_UNDER_OATH">Examination Under Oath</option>
-                                            </>
-                                        ) : (
-                                            <option value="OTHER">Other</option>
-                                        )}
-                                    </select>
-                                    {!isCourtReporting && formData.proceedingType === 'OTHER' && (
-                                        <div className="mt-3 space-y-2">
-                                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Describe Proceeding</label>
-                                            <input
-                                                className="luxury-input"
-                                                placeholder="Describe the proceeding or case type"
-                                                value={formData.customProceeding}
-                                                onChange={(e) => setFormData({ ...formData, customProceeding: e.target.value })}
-                                            />
-                                        </div>
-                                    )}
-                                    {isCourtReporting ? (
-                                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-tight ml-2 mt-2 italic">
-                                            If none apply, select Deposition to continue—our team will adjust after review.
-                                        </p>
-                                    ) : (
-                                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-tight ml-2 mt-2 italic">
-                                            CART bookings use a custom proceeding description—enter details under “Other.”
-                                        </p>
-                                    )}
-                                </div>
-
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={() => setStep(2)}
-                                        className="luxury-btn py-5 px-12 shadow-xl shadow-blue-500/20"
-                                    >
-                                        Proceed to Details <ChevronRight className="h-5 w-5" />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {step === 2 && (
-                        <div className="space-y-10 animate-in fade-in slide-in-from-right-8 duration-500">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Calendar Date</label>
-                                    <div className="relative group">
-                                        <button
-                                            type="button"
-                                            onMouseDown={(e) => { e.preventDefault(); dateInputRef.current?.showPicker?.(); dateInputRef.current?.focus(); }}
-                                            className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary transition-colors"
-                                        >
-                                            <Calendar className="h-5 w-5" />
-                                        </button>
-                                        <input
-                                            type="date"
-                                            ref={dateInputRef}
-                                            className="luxury-input pl-14"
-                                            value={formData.bookingDate}
-                                            onChange={(e) => setFormData({ ...formData, bookingDate: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Time</label>
-                                    <div className="relative group">
-                                        <button
-                                            type="button"
-                                            onMouseDown={(e) => { e.preventDefault(); timeInputRef.current?.showPicker?.(); timeInputRef.current?.focus(); }}
-                                            className="absolute left-3 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-primary transition-colors"
-                                        >
-                                            <Clock className="h-5 w-5" />
-                                        </button>
-                                        <input
-                                            type="time"
-                                            ref={timeInputRef}
-                                            className="luxury-input pl-14"
-                                            value={formData.bookingTime}
-                                            onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">State Jurisdiction</label>
-                                    <select
-                                        className="luxury-input"
-                                        value={formData.state}
-                                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                                    >
-                                        <option value="NY">NEW YORK</option>
-                                        <option value="NJ">NEW JERSEY</option>
-                                        <option value="CT">CONNECTICUT</option>
-                                        <option value="FL">FLORIDA</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-6">
-                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Reporting Environment</label>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <VenueCard
-                                        active={formData.appearanceType === 'REMOTE'}
-                                        onClick={() => setFormData({ ...formData, appearanceType: 'REMOTE' })}
-                                        icon={<Globe className="h-6 w-6" />}
-                                        title="Remote"
-                                        desc="Zoom / WebEx integration with global technical support."
-                                    />
-                                    <VenueCard
-                                        active={formData.appearanceType === 'IN_PERSON'}
-                                        onClick={() => setFormData({ ...formData, appearanceType: 'IN_PERSON' })}
-                                        icon={<Briefcase className="h-6 w-6" />}
-                                        title="On-Site Presence"
-                                    desc="Stenographer assigned to law firm or neutral venue."
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Add-On Services</label>
-                                    <span className="text-[9px] font-bold text-primary uppercase tracking-widest">Optional</span>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {effectiveAddOnOptions.map(option => (
-                                        <label
-                                            key={option.value}
-                                            className="flex items-center gap-3 p-4 border border-border rounded-2xl cursor-pointer hover:border-primary/40 transition-colors"
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                className="h-4 w-4 accent-primary"
-                                                checked={isAddOnSelected(option.value)}
-                                                onChange={() => toggleAddOnOption(option.value)}
-                                            />
-                                            <span className="text-sm font-bold text-muted-foreground">{option.label}</span>
-                                        </label>
-                                    ))}
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Expedite Delivery</label>
-                                    <select
-                                        className="luxury-input"
-                                        value={formData.addOns.expedite}
-                                        onChange={(e) => setFormData({ ...formData, addOns: { ...formData.addOns, expedite: e.target.value } })}
-                                    >
-                                        <option value="">Select delivery target</option>
-                                        {effectiveExpediteOptions.map(option => (
-                                            <option key={option.value} value={option.value}>{option.label}</option>
-                                        ))}
-                                    </select>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Other Add-On Services</label>
-                                    <input
-                                        className="luxury-input"
-                                        placeholder="Enter other add-on requests"
-                                        value={formData.otherAddOnNotes}
-                                        onChange={(e) => setFormData({ ...formData, otherAddOnNotes: e.target.value })}
-                                    />
-                                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-tight ml-2">Leave blank if none. Admin will review.</p>
-                                    </div>
-                                </div>
-                            </div>
-
+                {step === 2 && (
+                    <div className="space-y-12 animate-in fade-in slide-in-from-right-8 duration-500">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                             <div className="space-y-3">
-                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] ml-2">Additional Information</label>
-                                <textarea
-                                    className="luxury-input min-h-[120px] py-6 resize-none"
-                                    placeholder="Provide case nuances, terminology preferences, or appearance logistics..."
-                                    value={formData.specialRequirements}
-                                    onChange={(e) => setFormData({ ...formData, specialRequirements: e.target.value })}
-                                />
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Delivery Method</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={() => setFormData({...formData, appearanceType: 'REMOTE'})} className={`py-5 rounded-2xl border transition-all text-[9px] font-black uppercase tracking-widest ${formData.appearanceType === 'REMOTE' ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl' : 'bg-muted/50 border-gray-100'}`}>Remote Access</button>
+                                    <button onClick={() => setFormData({...formData, appearanceType: 'IN_PERSON'})} className={`py-5 rounded-2xl border transition-all text-[9px] font-black uppercase tracking-widest ${formData.appearanceType === 'IN_PERSON' ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl' : 'bg-muted/50 border-gray-100'}`}>In-Person Presence</button>
+                                </div>
                             </div>
-
-                            <div className="flex items-center justify-between pt-10">
-                                <button
-                                    onClick={() => setStep(1)}
-                                    className="text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    Modify Information
-                                </button>
-                                <button
-                                    onClick={handleSubmit}
-                                    disabled={loading}
-                                    className="luxury-btn py-5 px-12 shadow-2xl shadow-blue-500/30 flex items-center gap-4 disabled:opacity-50 disabled:cursor-not-allowed group"
-                                >
-                                    {loading ? (
-                                        <>Finalizing Booking... <Loader2 className="h-5 w-5 animate-spin" /></>
-                                    ) : (
-                                        <>Confirm Booking <Zap className="h-5 w-5 group-hover:scale-125 transition-transform" /></>
-                                    )}
-                                </button>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Scheduling Date</label>
+                                <div className="relative group">
+                                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-primary transition-colors pointer-events-none" />
+                                    <input type="date" className="luxury-input h-14 pl-12" value={formData.bookingDate} onChange={(e) => setFormData({ ...formData, bookingDate: e.target.value })} />
+                                </div>
                             </div>
-                            {loading && (
-                                <p className="text-[10px] font-black text-primary animate-pulse text-center mt-6 uppercase tracking-[0.3em]">
-                                    Establishing Secure Connection to Admin...
-                                </p>
-                            )}
                         </div>
-                    )}
 
-                    {step === 3 && (
-                        <div className="py-20 text-center animate-in zoom-in-95 duration-700">
-                            <div className="h-32 w-32 bg-emerald-500/10 rounded-[3rem] flex items-center justify-center mx-auto mb-10 shadow-inner relative">
-                                <div className="absolute inset-0 bg-emerald-500/10 rounded-[3rem] animate-ping opacity-20"></div>
-                                <CheckCircle className="h-14 w-14 text-emerald-500" />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Booking Start Time</label>
+                                <div className="relative group">
+                                    <Clock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-primary transition-colors pointer-events-none" />
+                                    <input type="time" className="luxury-input h-14 pl-12" value={formData.bookingTime} onChange={(e) => setFormData({ ...formData, bookingTime: e.target.value })} />
+                                </div>
                             </div>
-                            <h2 className="text-4xl font-black text-foreground uppercase tracking-tighter mb-4">Registry Processed</h2>
-                            <p className="text-muted-foreground font-medium max-w-sm mx-auto leading-relaxed mb-12">Your booking request has been entered into the MD Tactical Grid. You will receive an operational confirmation within 2 hours.</p>
-                            <Link
-                                href="/client/portal"
-                                className="inline-flex items-center gap-4 py-5 px-12 rounded-2xl bg-foreground text-background font-black text-[10px] uppercase tracking-[0.3em] hover:bg-primary hover:text-primary-foreground transition-all shadow-xl"
-                            >
-                                Track Assignment in Dashboard <LayoutDashboard className="h-4 w-4" />
-                            </Link>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Venue / Address Logistics</label>
+                                <div className="relative group">
+                                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-primary transition-colors pointer-events-none" />
+                                    <input className="luxury-input h-14 pl-12" placeholder="STREET ADDRESS OR ZOOM/WEBEX LINK" value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} />
+                                </div>
+                            </div>
                         </div>
-                    )}
-                </div>
-            </main>
-        </div>
-    )
-}
 
-function StepIndicator({ active, label }: any) {
-    return (
-        <div className="flex flex-col items-center gap-3 group">
-            <div className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all duration-500 ${active ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20 scale-110' : 'bg-muted text-muted-foreground'}`}>
-                {active ? <CheckCircle className="h-5 w-5" /> : <div className="h-2 w-2 rounded-full bg-muted-foreground/30" />}
-            </div>
-            <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${active ? 'text-foreground' : 'text-muted-foreground'}`}>{label}</span>
-        </div>
-    )
-}
+                        <div className="flex items-center justify-between pt-10 border-t border-border/50">
+                            <button onClick={() => setStep(1)} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2">
+                                <ChevronLeft /> Back to Proceeding
+                            </button>
+                            <button onClick={() => setStep(3)} disabled={!formData.bookingDate} className="bg-primary text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-foreground transition-all disabled:opacity-40">
+                                Proceed to Add-ons <ChevronRight />
+                            </button>
+                        </div>
+                    </div>
+                )}
 
-function VenueCard({ active, onClick, icon, title, desc }: any) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            className={`p-8 rounded-[2rem] border-2 transition-all text-left flex flex-col group ${active ? 'border-primary bg-primary/10 shadow-xl shadow-primary/5' : 'border-border hover:border-primary/50'}`}
-        >
-            <div className={`mb-6 transition-transform group-hover:scale-110 ${active ? 'text-primary' : 'text-muted-foreground group-hover:text-primary'}`}>
-                {icon}
+                {step === 3 && (
+                    <div className="space-y-12 animate-in fade-in slide-in-from-right-8 duration-500">
+                        <div className="space-y-8">
+                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Add-on Enhancements</label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                {activeAddOnOptions.map(option => (
+                                    <label key={option.value} className={`flex items-center gap-4 p-6 rounded-2xl border transition-all cursor-pointer ${formData.selectedAddOns.includes(option.value) ? 'bg-primary/5 border-primary shadow-inner' : 'bg-muted/50 border-gray-100'}`}>
+                                        <input type="checkbox" className="h-5 w-5 accent-primary rounded-lg" checked={formData.selectedAddOns.includes(option.value)} onChange={() => toggleAddOnOption(option.value)} />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-foreground">{option.label}</span>
+                                    </label>
+                                ))}
+                                
+                                {/* Expedite Manual Toggle */}
+                                <label className={`flex items-center gap-4 p-6 rounded-2xl border transition-all cursor-pointer ${isExpediteChecked ? 'bg-emerald-50 border-emerald-500 shadow-inner' : 'bg-muted/50 border-gray-100'}`}>
+                                    <input type="checkbox" className="h-5 w-5 accent-emerald-600 rounded-lg" checked={isExpediteChecked} onChange={(e) => setIsExpediteChecked(e.target.checked)} />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-foreground">Expedite Request</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        {isExpediteChecked && (
+                            <div className="space-y-4 p-8 bg-emerald-500/5 border border-emerald-500/10 rounded-[2rem] animate-in slide-in-from-top-4 duration-500">
+                                <label className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2">
+                                    <Zap className="h-3 w-3" /> Expedite Turnaround (Requirement 10)
+                                </label>
+                                <select className="luxury-input h-14 bg-white" value={formData.addOns.expedite} onChange={(e) => setFormData({ ...formData, addOns: { ...formData.addOns, expedite: e.target.value } })}>
+                                    <option value="">Select Turnaround (Requirement 10)</option>
+                                    {displayExpediteOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                                </select>
+                                <p className="text-[8px] font-bold text-emerald-600 uppercase tracking-[0.2em] italic">Turnaround premium is applied as a percentage of the base page rate.</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Protocol Notes (Requirement 9)</label>
+                            <textarea className="luxury-input min-h-[140px] py-6 resize-none" placeholder="Provide terminology preferences, case nuances, or witness specifics..." value={formData.specialRequirements} onChange={(e) => setFormData({ ...formData, specialRequirements: e.target.value })} />
+                        </div>
+
+                        <div className="flex items-center justify-between pt-10 border-t border-border/50">
+                            <button onClick={() => setStep(2)} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2">
+                                <ChevronLeft /> Back to Logistics
+                            </button>
+                            <button onClick={() => handleSubmit()} disabled={loading} className="bg-foreground text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-primary transition-all disabled:opacity-40">
+                                {loading ? <Loader2 className="animate-spin" /> : <>Finalize Booking <CheckCircle className="h-4 w-4" /></>}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {step === 4 && (
+                   <div className="py-24 text-center animate-in zoom-in-95 duration-700">
+                       <div className="h-24 w-24 bg-emerald-500/10 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-inner">
+                           <CheckCircle className="h-10 w-10 text-emerald-500" />
+                       </div>
+                       <h3 className="text-4xl font-black text-slate-900 uppercase tracking-tighter mb-4 italic">Request Successful</h3>
+                       <p className="text-sm font-medium text-slate-500 max-w-sm mx-auto uppercase tracking-widest">Your booking request has been staged for concierge review. You will receive an operational confirmation shortly.</p>
+                       <div className="mt-12 flex justify-center gap-4">
+                           <button onClick={() => router.push('/client/bookings')} className="px-8 py-4 bg-muted rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-slate-200 transition-all">View Active Jobs</button>
+                           <button onClick={() => window.location.reload()} className="px-8 py-4 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-primary/20 hover:scale-105 transition-all">New Request</button>
+                       </div>
+                   </div>
+                )}
             </div>
-            <h3 className={`text-lg font-black uppercase tracking-tight mb-2 ${active ? 'text-foreground' : 'text-muted-foreground'}`}>{title}</h3>
-            <p className="text-[10px] text-muted-foreground font-black uppercase leading-relaxed tracking-wider">{desc}</p>
-        </button>
+        </div>
     )
 }

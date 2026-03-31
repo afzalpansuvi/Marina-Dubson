@@ -105,7 +105,7 @@ export function SolutionsSection() {
                     Court Reporting Solutions
                 </h3>
                 <p className="text-sm md:text-lg font-medium max-w-2xl mx-auto text-white/80 italic">
-                    Certified stenographic professionals deployed for mission-critical legal contexts. We handle everything from standard depositions to complex arbitrations.
+                    Certified stenographic professionals deployed for mission-critical legal contexts. We handle everything from standard depositions to complex Arbitration/Hearings.
                 </p>
                 <div className="pt-4">
                     <button className="bg-[#0071c5] hover:bg-[#0051a8] text-white px-10 py-4 rounded-lg font-black uppercase tracking-widest text-xs transition-all">
@@ -120,9 +120,9 @@ export function SolutionsSection() {
 export function ServiceGrid() {
     const services = [
         {
-            title: 'Premium Court Reporting',
-            desc: 'Elite reporters supported by production teams that verify transcripts and deliver secure files for depositions, arbitrations, and examinations.',
-            bullets: ['Depositions', 'Arbitrations & Mediations', 'Examinations Under Oath', 'Mark “Other” for bespoke or multi-day matters'],
+            title: 'Professional Stenographic Reporting',
+            desc: 'Elite reporters supported by production teams that verify transcripts for Deposition, EUO, Hearings, and Trials.',
+            bullets: ['Deposition', 'Arbitration/Hearings', 'Examinations Under Oath', 'Other bespoke legal matters'],
             note: 'Select “Other” when your proceeding is custom—our concierge clarifies the scope before the calendar locks.',
             img: 'https://images.unsplash.com/photo-1521790945508-bf2a36314e85?auto=format&fit=crop&w=900&q=80'
         },
