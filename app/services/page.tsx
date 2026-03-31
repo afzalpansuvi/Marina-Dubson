@@ -2,6 +2,7 @@
 
 'use client'
 
+import Image from 'next/image'
 import React from 'react'
 import {
     PublicTopBar,
@@ -53,10 +54,11 @@ export default function ServicesPage() {
 
             <section className="relative h-[320px] flex items-center justify-center overflow-hidden">
                 <div className="absolute inset-0 z-0">
-                    <img
+                    <Image
                         src="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?auto=format&fit=crop&w=1920&q=80"
                         alt="Services Hero"
-                        className="w-full h-full object-cover brightness-[0.4]"
+                        fill
+                        className="object-cover brightness-[0.4]"
                     />
                 </div>
                 <div className="relative z-10 text-center space-y-3">

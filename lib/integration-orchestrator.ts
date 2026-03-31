@@ -192,7 +192,7 @@ export class IntegrationOrchestrator {
 
             const { subtotal, total } = PricingEngine.calculateTotal(rates, {
                 ...billingData,
-                isRemote: booking.location?.toLowerCase().includes('remote')
+                isRemote: booking.appearanceType === 'REMOTE'
             })
 
             const invoiceData: any = {
