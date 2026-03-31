@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
-import { Printer, Download, ArrowLeft, CreditCard } from 'lucide-react'
+import { Printer, Download, ArrowLeft, CreditCard, Check } from 'lucide-react'
 
 export default function InvoiceDetailPage() {
     const params = useParams()
@@ -35,8 +35,8 @@ export default function InvoiceDetailPage() {
         window.print()
     }
 
-    if (loading) return <div className="p-20 text-center font-black uppercase text-gray-400">Loading Secure Invoice...</div>
-    if (!invoice) return <div className="p-20 text-center">Invoice not found.</div>
+    if (loading) return <div className="p-20 text-center font-black uppercase text-gray-400">Loading Secure Bill...</div>
+    if (!invoice) return <div className="p-20 text-center">Bill not found.</div>
 
     return (
         <div className="min-h-screen bg-gray-50 pb-20 font-serif">
@@ -51,7 +51,7 @@ export default function InvoiceDetailPage() {
                     </button>
                     {invoice.status !== 'PAID' && (
                         <button className="flex items-center gap-2 px-6 py-2 bg-primary text-white rounded-lg text-xs font-black uppercase shadow-lg shadow-primary/20 hover:scale-105 transition-all">
-                            <CreditCard className="h-4 w-4" /> Settle Invoice
+                            <CreditCard className="h-4 w-4" /> Settle Bill
                         </button>
                     )}
                 </div>
@@ -74,7 +74,7 @@ export default function InvoiceDetailPage() {
                     </div>
                     <div className="text-right">
                         <div className="inline-block py-2 px-6 border-2 border-gray-900 mb-6">
-                            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-widest">Invoice</h2>
+                            <h2 className="text-2xl font-black text-gray-900 uppercase tracking-widest">Bill</h2>
                         </div>
                         <div className="text-xs font-black text-gray-900 space-y-2 uppercase text-right">
                             <p>JOB # {invoice.jobNumber}</p>
@@ -128,11 +128,11 @@ export default function InvoiceDetailPage() {
                             <tr>
                                 <td className="py-6">
                                     <p className="font-black text-gray-900 uppercase">Appearance Fee & Operational Processing</p>
-                                    <p className="text-[10px] text-gray-500 font-medium italic">$300 Base + $9 Congestion Pricing</p>
+                                    <p className="text-[10px] text-gray-500 font-medium italic">Base Appearance + Operational Surcharge</p>
                                 </td>
-                                <td className="text-center font-bold">${(invoice.appearanceFee + invoice.congestionFee).toFixed(2)}</td>
+                                <td className="text-center font-bold">${((invoice.appearanceFee || 0) + (invoice.congestionFee || 0)).toFixed(2)}</td>
                                 <td className="text-center font-bold">1</td>
-                                <td className="text-right font-black text-gray-900">${(invoice.appearanceFee + invoice.congestionFee).toFixed(2)}</td>
+                                <td className="text-right font-black text-gray-900">${((invoice.appearanceFee || 0) + (invoice.congestionFee || 0)).toFixed(2)}</td>
                             </tr>
 
                             {/* Realtime */}
@@ -230,13 +230,72 @@ export default function InvoiceDetailPage() {
                 </div>
 
                 {/* Summary Section */}
-                <div className="mt-20 flex justify-end">
-                    <div className="w-1/2 space-y-4">
+                <div className="mt-20 grid grid-cols-1 md:grid-cols-2 gap-12">
+                    {/* Payment Selection for Task 7 */}
+                    <div className="space-y-6 print:hidden">
+                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Secure Payment Selection</h4>
+                        <div className="grid grid-cols-1 gap-4">
+                            <button
+                                onClick={() => {
+                                    setInvoice({...invoice, paymentMethod: 'ACH/CHECK', processingFee: 0, total: (invoice.subtotal || 0) + (invoice.tax || 0) + (invoice.lateFee || 0)})
+                                }}
+                                className={`p-6 rounded-3xl border-2 transition-all text-left flex items-center justify-between group
+                                    ${invoice.paymentMethod !== 'CREDIT_CARD' ? 'border-primary bg-primary/5 shadow-xl' : 'border-gray-100 hover:border-gray-200 bg-white'}`}
+                            >
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Standard Settlement</p>
+                                    <h5 className="text-sm font-black text-gray-900 uppercase">Check/ACH Transfer</h5>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase mt-1">No additional processing fees</p>
+                                </div>
+                                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition-all ${invoice.paymentMethod !== 'CREDIT_CARD' ? 'bg-primary border-primary text-white' : 'border-gray-100'}`}>
+                                    {invoice.paymentMethod !== 'CREDIT_CARD' && <Check className="h-4 w-4" />}
+                                </div>
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    const fee = ((invoice.subtotal || 0) + (invoice.tax || 0) + (invoice.lateFee || 0)) * 0.035
+                                    setInvoice({...invoice, paymentMethod: 'CREDIT_CARD', processingFee: fee, total: (invoice.subtotal || 0) + (invoice.tax || 0) + (invoice.lateFee || 0) + fee})
+                                }}
+                                className={`p-6 rounded-3xl border-2 transition-all text-left flex items-center justify-between group
+                                    ${invoice.paymentMethod === 'CREDIT_CARD' ? 'border-indigo-600 bg-indigo-50/30 shadow-xl' : 'border-gray-100 hover:border-gray-200 bg-white'}`}
+                            >
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-1">Express Clearance</p>
+                                    <h5 className="text-sm font-black text-gray-900 uppercase">Credit Card / PayPal</h5>
+                                    <p className="text-[10px] font-bold text-indigo-400 uppercase mt-1">Automated 3.5% convenience fee</p>
+                                </div>
+                                <div className={`h-8 w-8 rounded-full border-2 flex items-center justify-center transition-all ${invoice.paymentMethod === 'CREDIT_CARD' ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-100'}`}>
+                                    {invoice.paymentMethod === 'CREDIT_CARD' && <Check className="h-4 w-4" />}
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
                         <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-gray-400">
                             <span>Subtotal</span>
                             <span className="text-gray-900 font-serif">${invoice.subtotal.toFixed(2)}</span>
                         </div>
-                        <div className="flex justify-between items-center bg-gray-900 p-6 text-white">
+                        {invoice.tax > 0 && (
+                            <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-gray-400">
+                                <span>Sales Tax</span>
+                                <span className="text-gray-900 font-serif">${invoice.tax.toFixed(2)}</span>
+                            </div>
+                        )}
+                        {(invoice.lateFee || 0) > 0 && (
+                            <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-rose-500">
+                                <span>Late Payment Fee</span>
+                                <span className="font-serif">+${invoice.lateFee.toFixed(2)}</span>
+                            </div>
+                        )}
+                        {(invoice.processingFee || 0) > 0 && (
+                            <div className="flex justify-between items-center text-xs font-black uppercase tracking-widest text-indigo-600">
+                                <span>Processing Fee (3.5%)</span>
+                                <span className="font-serif">+${invoice.processingFee.toFixed(2)}</span>
+                            </div>
+                        )}
+                        <div className={`flex justify-between items-center p-6 text-white transition-colors duration-500 ${invoice.paymentMethod === 'CREDIT_CARD' ? 'bg-indigo-900' : 'bg-gray-900'}`}>
                             <span className="text-xs font-black uppercase tracking-[0.3em] font-poppins">Total Due</span>
                             <span className="text-2xl font-black font-serif">${invoice.total.toFixed(2)}</span>
                         </div>

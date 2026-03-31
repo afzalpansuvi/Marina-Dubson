@@ -16,7 +16,8 @@ export async function GET(
                 },
                 createdTasks: {
                     orderBy: { createdAt: 'desc' }
-                }
+                },
+                contact: true
             }
         })
 
@@ -61,6 +62,19 @@ export async function PATCH(
             taxId
         }
 
+        if (body.contact) {
+            updateData.contact = {
+                update: {
+                    rating: body.contact.rating ? parseInt(body.contact.rating) : undefined,
+                    isBlacklisted: body.contact.isBlacklisted !== undefined ? body.contact.isBlacklisted : undefined,
+                    blacklistReason: body.contact.blacklistReason,
+                    internalStaffNotes: body.contact.internalStaffNotes,
+                    customPricingEnabled: body.contact.customPricingEnabled,
+                    pricingNotes: body.contact.pricingNotes
+                }
+            }
+        }
+
         const updatedUser = await prisma.user.update({
             where: { id },
             data: updateData,
@@ -70,7 +84,8 @@ export async function PATCH(
                 },
                 createdTasks: {
                     orderBy: { createdAt: 'desc' }
-                }
+                },
+                contact: true
             }
         })
 

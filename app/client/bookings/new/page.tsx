@@ -103,7 +103,7 @@ export default function NewBookingPage() {
     }, [])
 
     const activeAddOnOptions = addOnOptions.filter(o => o.active && o.category === 'ADD_ON')
-    const displayExpediteOptions = addOnOptions.filter(o => o.active && o.category === 'EXPEDITE').sort((a, b) => parseInt(a.value) - parseInt(b.value))
+    const displayExpediteOptions = addOnOptions.filter(o => o.active && o.category === 'EXPEDITE').sort((a, b) => parseFloat(b.value) - parseFloat(a.value))
 
     const toggleAddOnOption = (value: string) => {
         setFormData(prev => {

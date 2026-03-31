@@ -263,8 +263,12 @@ export default function BookingManagementPage() {
         hasInterpreter: false,
         hasExpert: false,
         hasCart: false,
+        hasPaperDelivery: false,
+        hasPreBilledReview: false,
+        isOnRecordBust: false,
         afterHoursCount: 0,
         waitTimeCount: 0,
+        locationBaseFee: 0,
         notes: '',
         rateTier: 'STANDARD',
         overrides: {} as any
@@ -304,15 +308,16 @@ export default function BookingManagementPage() {
         if (!booking) return { subtotal: 0, total: 0, breakdown: [] as any[] }
 
         // Resolve expedite logic
-        const getExpMultiplier = (days: number) => {
-            const scale: Record<number, number> = { 0: 1.25, 1: 1.10, 2: 1.00, 3: 0.90, 4: 0.80, 5: 0.70, 6: 0.60, 7: 0.50, 8: 0.40, 9: 0.30, 10: 0.20 }
-            return scale[days] ?? 0.20
-        }
-
         const rawBaseRate = (billingData as any).overrides?.pageRate ?? (booking as any).lockedPageRate ?? (billingData.rateTier === 'PRIVATE' ? 4.75 : 4.25)
-        const expediteTier = billingData.turnaroundDays ?? 10
-        const expediteMultiplier = getExpMultiplier(expediteTier)
-        const effectivePageRate = rawBaseRate + (rawBaseRate * expediteMultiplier)
+        
+        // Task 4: FIXED — expedite multiplier is now a direct scale of the page rate
+        // Rate card: immediate=130%, 1-day=115%, 2-day=100% (base), ..., 10-day=50%
+        const getExpMultiplier = (days: number) => ({
+            0: 1.30, 1: 1.15, 2: 1.00, 3: 0.95, 4: 0.90,
+            5: 0.85, 6: 0.80, 7: 0.75, 8: 0.70, 9: 0.65, 10: 0.50
+        } as Record<number, number>)[days] ?? 1.00
+        const expediteMultiplier = getExpMultiplier(billingData.turnaroundDays)
+        const effectivePageRate = rawBaseRate * expediteMultiplier
 
         const rates = {
             pageRate: effectivePageRate,
@@ -330,8 +335,16 @@ export default function BookingManagementPage() {
             afterHoursRate: (billingData as any).overrides?.afterHoursRate ?? 125,
             waitTimeRate: (billingData as any).overrides?.waitTimeRate ?? 100,
             cartRate: (billingData as any).overrides?.cartRate ?? 2.00,
-            minFee: (billingData as any).overrides?.minimumFee ?? (booking as any).lockedMinimumFee ?? (billingData.rateTier === 'PRIVATE' ? 400 : 400)
+            // Task 6: Admin cover charge — $500 standard floor, $750 private floor
+            minFee: (billingData as any).overrides?.minimumFee ?? (booking as any).lockedMinimumFee ?? (billingData.rateTier === 'PRIVATE' ? 750 : 500)
         } as any
+
+        // On-Record Bust: Private $500 floor (overrides manual override only if not already set higher)
+        if (billingData.isOnRecordBust && billingData.rateTier === 'PRIVATE') {
+            if (!(billingData as any).overrides?.minimumFee) {
+                rates.minFee = Math.max(rates.minFee, 500)
+            }
+        }
 
         const breakdown = []
 
@@ -339,7 +352,7 @@ export default function BookingManagementPage() {
         let currentBase = 0
         const pageCharge = billingData.pages * rates.pageRate
         if (pageCharge > 0) {
-            breakdown.push({ label: `Transcript (${expediteTier} Day)`, value: pageCharge, detail: `${billingData.pages} pgs @ $${rates.pageRate.toFixed(2)}` })
+            breakdown.push({ label: `Transcript (${billingData.turnaroundDays ?? 10} Day)`, value: pageCharge, detail: `${billingData.pages} pgs @ $${rates.pageRate.toFixed(2)}` })
             currentBase += pageCharge
         }
 
@@ -396,6 +409,19 @@ export default function BookingManagementPage() {
             const wt = billingData.waitTimeCount * rates.waitTimeRate
             breakdown.push({ label: 'Wait Time Surcharge', value: wt, detail: `${billingData.waitTimeCount} hrs @ $${rates.waitTimeRate}` })
             currentExtras += wt
+        }
+        if (billingData.locationBaseFee > 0) {
+            breakdown.push({ label: 'Location Base/Travel Fee', value: billingData.locationBaseFee, detail: 'Out-of-radius/Custom region addition' })
+            currentExtras += billingData.locationBaseFee
+        }
+        if (billingData.hasPaperDelivery) {
+            breakdown.push({ label: 'Delivery Method: Paper', value: 150, detail: 'Specialized Physical Document Assembly ($150 flat)' })
+            currentExtras += 150
+        }
+        if (billingData.hasPreBilledReview) {
+            const reviewFee = billingData.pages * 1.00
+            breakdown.push({ label: 'Pre-billed Review Pricing', value: reviewFee, detail: `+$1.00/pg — ${billingData.pages} pgs` })
+            currentExtras += reviewFee
         }
 
         return { subtotal: currentBase + currentExtras, total: baseTotal + currentExtras, breakdown }
@@ -708,16 +734,25 @@ export default function BookingManagementPage() {
                                 <CheckboxItem label="Interpreter" checked={billingData.hasInterpreter} onChange={(v) => setBillingData({ ...billingData, hasInterpreter: v })} />
                                 <CheckboxItem label="Expert Witness" checked={billingData.hasExpert} onChange={(v) => setBillingData({ ...billingData, hasExpert: v })} />
                                 <CheckboxItem label="CART Services" checked={billingData.hasCart} onChange={(v) => setBillingData({ ...billingData, hasCart: v })} />
+                                <CheckboxItem label="Paper Delivery (+$150)" checked={billingData.hasPaperDelivery} onChange={(v) => setBillingData({ ...billingData, hasPaperDelivery: v })} />
+                                <CheckboxItem label="Pre-billed Review (+$1/pg)" checked={billingData.hasPreBilledReview} onChange={(v) => setBillingData({ ...billingData, hasPreBilledReview: v })} />
+                                {billingData.rateTier === 'PRIVATE' && (
+                                    <CheckboxItem label="On-Record Bust ($500 min)" checked={billingData.isOnRecordBust} onChange={(v) => setBillingData({ ...billingData, isOnRecordBust: v })} />
+                                )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[8px] font-black ml-2 text-muted-foreground uppercase">Afterhours (Hrs)</label>
-                                    <input type="number" value={billingData.afterHoursCount} onChange={(e) => setBillingData({...billingData, afterHoursCount: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-muted/50 border border-border font-black text-center" />
+                                    <input type="number" value={billingData.afterHoursCount} onChange={(e) => setBillingData({...billingData, afterHoursCount: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-muted/50 border border-border font-black text-center outline-none focus:ring-2 focus:ring-primary/20" />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[8px] font-black ml-2 text-muted-foreground uppercase">Wait Time (Hrs)</label>
-                                    <input type="number" value={billingData.waitTimeCount} onChange={(e) => setBillingData({...billingData, waitTimeCount: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-muted/50 border border-border font-black text-center" />
+                                    <input type="number" value={billingData.waitTimeCount} onChange={(e) => setBillingData({...billingData, waitTimeCount: parseInt(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-muted/50 border border-border font-black text-center outline-none focus:ring-2 focus:ring-primary/20" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[8px] font-black ml-2 text-primary uppercase">Location/Travel ($)</label>
+                                    <input type="number" step="0.01" value={billingData.locationBaseFee} onChange={(e) => setBillingData({...billingData, locationBaseFee: parseFloat(e.target.value) || 0})} className="w-full px-4 py-2 rounded-xl bg-primary/10 border border-primary/20 text-primary font-black text-center outline-none focus:ring-2 focus:ring-primary" placeholder="0.00" />
                                 </div>
                             </div>
 

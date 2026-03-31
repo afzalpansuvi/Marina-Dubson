@@ -57,6 +57,10 @@ model Contact {
   pricingNotes         String?
   status               String               @default("Active")
   notes                String?
+  rating               Int                  @default(5)
+  isBlacklisted        Boolean              @default(false)
+  blacklistReason      String?
+  internalStaffNotes   String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   bookings             Booking[]
@@ -216,6 +220,7 @@ model Invoice {
   copyRate         Float     @default(1.00)
   appearanceFee    Float
   congestionFee    Float     @default(9.00)
+  locationBaseFee  Float?
   realtimeFee      Float?
   realtimeDevices  Int?
   roughFee         Float?
@@ -227,8 +232,12 @@ model Invoice {
   waitTimeFee      Float?
   waitTimeCount    Int?
   cancellationFee  Float?
+  preBilledReviewFee Float?
+  paperDeliveryFee   Float?
   minimumFee       Float     @default(400)
   cartFee          Float?
+  lateFee          Float?    @default(0)
+  processingFee    Float?    @default(0)
   subtotal         Float
   tax              Float     @default(0)
   total            Float

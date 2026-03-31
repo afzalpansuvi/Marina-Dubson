@@ -188,7 +188,7 @@ export default function InvoicesPage() {
 
     const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
         PAID: { label: 'Paid', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle },
-        SENT: { label: 'Sent', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: Clock },
+        SENT: { label: 'Billed/Invoiced — Awaiting Payment', color: 'bg-amber-100 text-amber-700 border-amber-200', icon: Clock },
         DRAFT: { label: 'Draft', color: 'bg-slate-100 text-slate-600 border-slate-200', icon: FileText },
         OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700 border-red-200', icon: AlertCircle },
     }

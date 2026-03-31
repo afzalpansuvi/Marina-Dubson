@@ -19,7 +19,9 @@ const invoiceSchema = z.object({
     hasInterpreter: z.boolean().optional(),
     hasExpert: z.boolean().optional(),
     notes: z.string().optional(),
-    sendNow: z.boolean().optional()
+    sendNow: z.boolean().optional(),
+    locationBaseFee: z.number().optional(),
+    hasPreBilledReview: z.boolean().optional()
 })
 
 // GET all invoices
@@ -118,6 +120,8 @@ export async function POST(request: NextRequest) {
             hasExpert: data.hasExpert,
             afterHoursCount: data.afterHoursCount,
             waitTimeCount: data.waitTimeCount,
+            locationBaseFee: data.locationBaseFee,
+            hasPreBilledReview: data.hasPreBilledReview,
             notes: data.notes
         }, { sendNow: data.sendNow ?? false })
 

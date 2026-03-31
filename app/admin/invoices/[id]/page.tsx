@@ -59,7 +59,7 @@ export default function InvoiceDetailPage() {
 
     const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
         PAID: { label: 'Paid', color: 'text-emerald-600 bg-emerald-50 border-emerald-200', icon: CheckCircle },
-        SENT: { label: 'Sent — Awaiting Payment', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: Clock },
+        SENT: { label: 'Billed/Invoiced — Awaiting Payment', color: 'text-amber-600 bg-amber-50 border-amber-200', icon: Clock },
         DRAFT: { label: 'Draft', color: 'text-slate-600 bg-slate-100 border-slate-200', icon: AlertCircle },
         OVERDUE: { label: 'Overdue', color: 'text-red-600 bg-red-50 border-red-200', icon: AlertCircle },
     }
@@ -143,6 +143,21 @@ export default function InvoiceDetailPage() {
             label: 'Cancellation Fee',
             detail: `Late cancellation — minimum booking fee`,
             amount: invoice.cancellationFee,
+        },
+        invoice.locationBaseFee > 0 && {
+            label: 'Location / Travel Base Fee',
+            detail: `Out-of-radius travel or specific region charge`,
+            amount: invoice.locationBaseFee,
+        },
+        invoice.paperDeliveryFee > 0 && {
+            label: 'Delivery Method: Paper ($150)',
+            detail: `Specialized Physical Document Assembly`,
+            amount: invoice.paperDeliveryFee,
+        },
+        invoice.preBilledReviewFee > 0 && {
+            label: 'Pre-billed Review Pricing',
+            detail: `+$1.00/pg (Standard Review Rate)`,
+            amount: invoice.preBilledReviewFee,
         },
     ].filter(Boolean) as { label: string; detail: string; amount: number }[]
 
@@ -352,6 +367,12 @@ export default function InvoiceDetailPage() {
                                         <div className="flex justify-between items-center text-[10px] font-black text-muted-foreground uppercase tracking-widest">
                                             <span>Surcharge TAX</span>
                                             <span>${invoice.tax.toFixed(2)}</span>
+                                        </div>
+                                    )}
+                                    {(invoice.lateFee || 0) > 0 && (
+                                        <div className="flex justify-between items-center text-[10px] font-black text-rose-500 uppercase tracking-widest">
+                                            <span>Late Payment Fee</span>
+                                            <span>+${invoice.lateFee.toFixed(2)}</span>
                                         </div>
                                     )}
                                     <div className="h-px w-full bg-border my-6" />

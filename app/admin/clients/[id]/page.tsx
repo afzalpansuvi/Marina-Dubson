@@ -345,6 +345,81 @@ export default function UserProfilePage() {
                         </div>
                     )}
 
+                    {/* Task 15: Internal Oversight (Blacklist/Rating) */}
+                    {isClient && (
+                        <div className={`glass-panel p-10 rounded-[3rem] border shadow-lg transition-all ${editData.contact?.isBlacklisted ? 'border-rose-200 bg-rose-50/30' : 'border-amber-100 bg-amber-50/10'}`}>
+                            <div className="flex items-center justify-between mb-8">
+                                <h3 className={`text-sm font-black uppercase tracking-[0.3em] flex items-center gap-3 ${editData.contact?.isBlacklisted ? 'text-rose-700' : 'text-amber-700'}`}>
+                                    <ShieldCheck className="h-4 w-4" /> Internal Oversight
+                                </h3>
+                                {editData.contact?.isBlacklisted && (
+                                    <div className="px-3 py-1 rounded-full bg-rose-500 text-white text-[8px] font-black uppercase tracking-widest animate-pulse">
+                                        Blacklisted
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-6">
+                                {/* Risk Rating */}
+                                <div className="space-y-3">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Client Reliability Rating</label>
+                                    <div className="flex gap-2">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <button
+                                                key={star}
+                                                disabled={!isEditing}
+                                                onClick={() => handleUpdateCustomPricing('rating', star)}
+                                                className={`h-10 w-10 rounded-xl border-2 transition-all flex items-center justify-center
+                                                    ${(editData.contact?.rating || 5) >= star ? 'bg-amber-400 border-amber-400 text-white shadow-lg shadow-amber-200' : 'bg-white border-gray-100 text-gray-200'}`}
+                                            >
+                                                <Award className="h-5 w-5" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Blacklist Toggle */}
+                                <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                                    <div className="space-y-0.5">
+                                        <span className="text-[10px] font-black text-gray-900 uppercase tracking-widest">Protocol Blacklist</span>
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Deny further booking clearance</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleUpdateCustomPricing('isBlacklisted', !editData.contact?.isBlacklisted)}
+                                        disabled={!isEditing}
+                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${editData.contact?.isBlacklisted ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-gray-100 text-gray-400'}`}
+                                    >
+                                        {editData.contact?.isBlacklisted ? 'ACTIVE' : 'INACTIVE'}
+                                    </button>
+                                </div>
+
+                                {editData.contact?.isBlacklisted && (
+                                    <div className="space-y-2 animate-in slide-in-from-top-4 duration-500">
+                                        <label className="text-[9px] font-black text-rose-500 uppercase tracking-widest ml-1">Blacklist justification</label>
+                                        <textarea
+                                            disabled={!isEditing}
+                                            className="w-full p-4 bg-rose-50/50 border border-rose-100 rounded-2xl text-[11px] font-medium text-rose-900 placeholder:text-rose-300 outline-none min-h-[80px]"
+                                            placeholder="Specify security/financial reason for blacklist..."
+                                            value={editData.contact?.blacklistReason || ''}
+                                            onChange={(e) => handleUpdateCustomPricing('blacklistReason', e.target.value)}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Internal Staff Ledger</label>
+                                    <textarea
+                                        disabled={!isEditing}
+                                        className="w-full p-4 bg-white border border-gray-100 rounded-2xl text-[11px] font-medium text-gray-700 placeholder:text-gray-300 outline-none min-h-[120px]"
+                                        placeholder="Private notes on client behavior, billing issues, or special handling..."
+                                        value={editData.contact?.internalStaffNotes || ''}
+                                        onChange={(e) => handleUpdateCustomPricing('internalStaffNotes', e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {!isClient && (
                         <div className="glass-panel p-10 rounded-[3rem] border border-indigo-100 bg-indigo-50/30">
                             <h3 className="text-sm font-black text-indigo-700 uppercase tracking-[0.3em] mb-8 flex items-center gap-3">

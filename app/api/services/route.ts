@@ -49,10 +49,8 @@ export async function GET(request: NextRequest) {
             orderBy: { serviceName: 'asc' },
         })
 
-        // Auto-seed if empty
-        if (services.length === 0) {
-            console.log('Operational Void detected. Triggering auto-seed...')
-            const defaultServices = [
+        // Requirement 13/7: Absolute synchronization of standardized categories
+        const defaultServices = [
                 {
                     serviceName: 'Deposition',
                     category: 'COURT_REPORTING' as any,
@@ -145,7 +143,7 @@ export async function GET(request: NextRequest) {
             for (const s of defaultServices) {
                 await prisma.service.upsert({
                     where: { id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-') },
-                    update: s,
+                    update: s as any,
                     create: {
                         id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-'),
                         ...s
@@ -153,11 +151,11 @@ export async function GET(request: NextRequest) {
                 })
             }
 
+            // Refetch to include the newly synced items
             services = await prisma.service.findMany({
                 where,
                 orderBy: { serviceName: 'asc' },
             })
-        }
 
         // Apply mandatory sorting per Requirement 7
         services.sort((a, b) => {

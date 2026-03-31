@@ -100,7 +100,7 @@ export default function ClientPortal() {
         : 'Cancellations between 3:00 PM and 6:00 PM on the previous business day incur a $300 fee; cancellations after 6:00 PM up until the job day incur a $400 fee.'
     const cancellationSummaryText = systemPolicy.cancellation_policy_text || defaultSummary
     const paymentTermsChoice = systemPolicy.payment_terms_choice || '30'
-    const paymentTermsDescription = systemPolicy.payment_terms_description || 'Payment is due within 30 days of invoice issuance.'
+    const paymentTermsDescription = systemPolicy.payment_terms_description || 'Payment is due within 30 days of billing issuance.'
     const paymentTermsCopy = paymentTermsChoice === 'CUSTOM'
         ? (systemPolicy.payment_terms_custom || 'Custom agreement governs payment.')
         : `${paymentTermsChoice} Day Terms`
@@ -646,7 +646,7 @@ export default function ClientPortal() {
                                                         href={`/client/invoices/${booking.invoice.id}`}
                                                         className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-500 text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all border border-emerald-500/20 hover:border-emerald-500 flex items-center gap-1.5"
                                                     >
-                                                        <DollarSign className="h-3 w-3" /> View Invoice
+                                                        <DollarSign className="h-3 w-3" /> View Bill
                                                     </Link>
                                                 )}
                                                 {['SUBMITTED', 'ACCEPTED', 'CONFIRMED'].includes(booking.bookingStatus) && (
@@ -812,7 +812,7 @@ export default function ClientPortal() {
                                     <div>
                                         <p className="text-[9px] font-black uppercase tracking-[0.3em] text-muted-foreground">Financial Responsibility</p>
                                         <h4 className="text-3xl font-black text-foreground tracking-tight">{financialResponsibilityDays} Days</h4>
-                                        <p className="text-[10px] uppercase tracking-tight text-muted-foreground mt-1">{isAgencyClient ? 'Agency Terms • Direct Deposit' : 'Client Terms • Standard Invoicing'}</p>
+                                        <p className="text-[10px] uppercase tracking-tight text-muted-foreground mt-1">{isAgencyClient ? 'Agency Terms • Direct Deposit' : 'Client Terms • Standard Billing'}</p>
                                     </div>
                                     <div className="px-4 py-2 rounded-full border border-primary text-[10px] font-black uppercase tracking-[0.3em] text-primary">
                                         {isAgencyClient ? 'Agency' : 'Client'}
@@ -826,7 +826,7 @@ export default function ClientPortal() {
                                 </div>
                                 {isAgencyClient && (
                                     <p className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground">
-                                        Agencies settle via direct deposit; invoices are maintained outside this portal. Contact the operations desk for statements.
+                                        Agencies settle via direct deposit; billing records are maintained outside this portal. Contact the operations desk for statements.
                                     </p>
                                 )}
                             </div>
@@ -846,7 +846,7 @@ export default function ClientPortal() {
                                     <div className="p-8 rounded-3xl bg-card border border-border text-center">
                                         <h4 className="text-lg font-black text-foreground uppercase tracking-tight mb-3">Agency Payments</h4>
                                         <p className="text-sm text-muted-foreground leading-relaxed">
-                                            Agencies manage settlements via direct deposit. Invoices and statements are handled through your agency ledger; contact operations for copies.
+                                            Agencies manage settlements via direct deposit. Billing statements and records are handled through your agency ledger; contact operations for copies.
                                         </p>
                                     </div>
                                 ) : invoices.length > 0 ? invoices.map(invoice => (
@@ -872,10 +872,10 @@ export default function ClientPortal() {
                                                 <div className="flex flex-col items-end gap-3">
                                                     <span className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border
                                                             ${invoice.status === 'PAID' ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' : 'bg-rose-500/10 text-rose-500 border-rose-500/20'}`}>
-                                                        {invoice.status}
+                                                        {invoice.status === 'SENT' ? 'BILLED / INVOICED' : invoice.status}
                                                     </span>
                                                     {invoice.status !== 'PAID' && (
-                                                        <button className="text-[10px] font-black text-primary uppercase underline tracking-widest">Pay Invoice</button>
+                                                        <button className="text-[10px] font-black text-primary uppercase underline tracking-widest">Pay Bill</button>
                                                     )}
                                                 </div>
                                             </div>
@@ -884,7 +884,7 @@ export default function ClientPortal() {
                                 )) : (
                                     <div className="py-20 text-center border-2 border-dashed border-border rounded-[2rem]">
                                         <CreditCard className="h-12 w-12 text-muted-foreground/20 mx-auto mb-4" />
-                                        <p className="text-xs font-black text-muted-foreground uppercase tracking-widest">No invoices found.</p>
+                                        <p className="text-xs font-black uppercase tracking-widest">No active bills found.</p>
                                     </div>
                                 )}
                             </div>

@@ -158,6 +158,18 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Contact identity required' }, { status: 400 })
         }
 
+        // Task 15: Blacklist Enforcement
+        const contact = await prisma.contact.findUnique({
+            where: { id: contactId }
+        })
+
+        if (contact?.isBlacklisted) {
+            return NextResponse.json({
+                error: 'Security Alert: This account has been flagged for administrative review. New booking clearance denied.',
+                reason: contact.blacklistReason
+            }, { status: 403 })
+        }
+
         const serviceExists = await prisma.service.findUnique({
             where: { id: data.serviceId }
         })

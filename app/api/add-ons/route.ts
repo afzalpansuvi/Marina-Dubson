@@ -21,24 +21,20 @@ export async function GET() {
     // Auto-seed if empty
     if (options.length === 0) {
       const defaultAddOns = [
-        {
-          label: 'Rough Draft',
-          value: 'ROUGH_DRAFT',
-          category: 'ADD_ON' as any,
-          description: 'Same-day unedited transcript for immediate review.'
-        },
-        {
-          label: 'Real-Time Streaming',
-          value: 'REAL_TIME',
-          category: 'ADD_ON' as any,
-          description: 'Live verbatim feed delivered directly to your devices during the proceeding.'
-        },
-        {
-          label: 'CART Services',
-          value: 'CART_SERVICES',
-          category: 'ADD_ON' as any,
-          description: 'Communication Access Real-Time Translation for accessibility compliance.'
-        }
+        { label: 'Rough Draft', value: 'ROUGH_DRAFT', category: 'ADD_ON' as any, active: true },
+        { label: 'Real-Time Streaming', value: 'REAL_TIME', category: 'ADD_ON' as any, active: true },
+        { label: 'CART Services', value: 'CART_SERVICES', category: 'ADD_ON' as any, active: true },
+        { label: 'Immediate', value: '1.25', category: 'EXPEDITE' as any, active: true, description: '125% of Original Rate' },
+        { label: 'Next Day (1 Day)', value: '1.10', category: 'EXPEDITE' as any, active: true, description: '110% of Original Rate' },
+        { label: '2 Days', value: '1.00', category: 'EXPEDITE' as any, active: true, description: '100% of Original Rate' },
+        { label: '3 Days', value: '0.90', category: 'EXPEDITE' as any, active: true, description: '90% of Original Rate' },
+        { label: '4 Days', value: '0.80', category: 'EXPEDITE' as any, active: true, description: '80% of Original Rate' },
+        { label: '5 Days', value: '0.70', category: 'EXPEDITE' as any, active: true, description: '70% of Original Rate' },
+        { label: '6 Days', value: '0.60', category: 'EXPEDITE' as any, active: true, description: '60% of Original Rate' },
+        { label: '7 Days', value: '0.50', category: 'EXPEDITE' as any, active: true, description: '50% of Original Rate' },
+        { label: '8 Days', value: '0.40', category: 'EXPEDITE' as any, active: true, description: '40% of Original Rate' },
+        { label: '9 Days', value: '0.30', category: 'EXPEDITE' as any, active: true, description: '30% of Original Rate' },
+        { label: '10 Days (Regular)', value: '0.20', category: 'EXPEDITE' as any, active: true, description: '20% of Original Rate' }
       ]
 
       for (const addon of defaultAddOns) {

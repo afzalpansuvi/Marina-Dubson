@@ -131,8 +131,8 @@ export default function ReportsPage() {
             ['Client', 'Bookings', 'Revenue Paid', 'Last Booking'],
             ...clientRows.map(c => [c.name, c.bookings, `$${c.revenue.toFixed(2)}`, c.lastDate ? format(new Date(c.lastDate), 'yyyy-MM-dd') : '—']),
             [],
-            ['INVOICE DETAIL'],
-            ['Invoice #', 'Job #', 'Client', 'Date', 'Due Date', 'Status', 'Total'],
+            ['BILL DETAIL'],
+            ['Bill #', 'Job #', 'Client', 'Date', 'Due Date', 'Status', 'Total'],
             ...filteredInvoices.map(i => [
                 i.invoiceNumber,
                 i.jobNumber || '',
@@ -155,7 +155,7 @@ export default function ReportsPage() {
 
     const exportBookingsCSV = () => {
         const rows = [
-            ['Booking #', 'Client', 'Company', 'Service', 'Proceeding Type', 'Date', 'Time', 'Appearance', 'Status', 'Invoice Status'],
+            ['Booking #', 'Client', 'Company', 'Service', 'Proceeding Type', 'Date', 'Time', 'Appearance', 'Status', 'Bill Status'],
             ...filteredBookings.map(b => [
                 b.bookingNumber,
                 `${b.contact?.firstName || ''} ${b.contact?.lastName || ''}`.trim(),
@@ -354,14 +354,14 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="md-card">
-                    <h3 className="font-semibold text-foreground mb-5">Invoice Status Breakdown</h3>
+                    <h3 className="font-semibold text-foreground mb-5">Bill Status Breakdown</h3>
                     <div className="space-y-3">
-                        {['SENT', 'PAID', 'DRAFT', 'OVERDUE'].map(s => {
+                        {['BILLED', 'PAID', 'DRAFT', 'OVERDUE'].map(s => {
                             const inv = filteredInvoices.filter(i => i.status === s)
                             const total = inv.reduce((sum, i) => sum + i.total, 0)
                             const pct = filteredInvoices.length > 0 ? (inv.length / filteredInvoices.length) * 100 : 0
                             const colors: Record<string, string> = {
-                                SENT: 'bg-amber-400', PAID: 'bg-emerald-500', DRAFT: 'bg-slate-400', OVERDUE: 'bg-red-500'
+                                BILLED: 'bg-amber-400', PAID: 'bg-emerald-500', DRAFT: 'bg-slate-400', OVERDUE: 'bg-red-500'
                             }
                             if (inv.length === 0) return null
                             return (
