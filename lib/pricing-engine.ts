@@ -48,8 +48,8 @@ export class PricingEngine {
         const rates: BookingRates = {
             pageRate: service.pageRate || 4.25,
             copyRate: 1.50,
-            appearanceFeeRemote: service.appearanceFeeRemote || 350.00,
-            appearanceFeeInPerson: service.appearanceFeeInPerson || 400.00,
+            appearanceFeeRemote: service.appearanceFeeRemote || 100.00,
+            appearanceFeeInPerson: service.appearanceFeeInPerson || 200.00,
             congestionFee: 15.00,
             realtimeFee: service.realtimeFee || 0,
             realtimeDeviceRate: 1.50,
