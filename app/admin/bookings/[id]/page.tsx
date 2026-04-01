@@ -133,11 +133,11 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
                     onClick={() => setEditMode(!editMode)} 
                     className="btn-primary px-8 py-3 text-[10px] font-black uppercase tracking-[0.2em] shadow-xl"
                 >
-                    {editMode ? 'Cancel Editing' : 'Management Protocol (Req 12)'}
+                    {editMode ? 'Cancel Editing' : 'Management Protocol'}
                 </button>
             </div>
 
-            {/* Management Protocol - Requirement 12: Add/Edit details later */}
+            {/* Management Protocol panel: edit the booking detail matrix */}
             {editMode && (
                 <div className="glass-panel rounded-[2.5rem] overflow-hidden border border-indigo-100 bg-indigo-50/5 p-10 animate-in slide-in-from-bottom-8">
                     <div className="flex items-center gap-3 mb-8">

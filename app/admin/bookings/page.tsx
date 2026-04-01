@@ -38,6 +38,11 @@ export default function BookingManagementPage() {
         setFilter(newFilter)
     }
 
+    const closeCompleteModal = () => {
+        setShowCompleteModal(false)
+        setInvoiceTargetId(null)
+    }
+
     useEffect(() => {
         const q = searchParams.get('q')
         if (q) setSearchQuery(q)
@@ -57,6 +62,7 @@ export default function BookingManagementPage() {
     const [showClaimsModal, setShowClaimsModal] = useState(false)
     const [selectedBookingClaims, setSelectedBookingClaims] = useState<any[]>([])
     const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
+    const [invoiceTargetId, setInvoiceTargetId] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [completedInvoiceId, setCompletedInvoiceId] = useState<string | null>(null)
     const [showAddonModal, setShowAddonModal] = useState(false)
@@ -102,6 +108,7 @@ export default function BookingManagementPage() {
             const detail = e.detail || {}
             if (detail.id) {
                 setSelectedBookingId(detail.id)
+                setInvoiceTargetId(detail.id)
                 setAddonText(detail.text || '')
                 setShowAddonModal(true)
             }
@@ -320,12 +327,17 @@ export default function BookingManagementPage() {
         }
     }
 
-    const handleComplete = async (id: string) => {
+    const handleComplete = async () => {
+        const bookingId = invoiceTargetId ?? selectedBookingId
+        if (!bookingId) {
+            setError('Select a booking before generating an invoice.')
+            return
+        }
         setIsPending(true)
         try {
             setError(null)
             const token = localStorage.getItem('token')
-            const res = await fetch(`/api/bookings/${id}/complete`, {
+            const res = await fetch(`/api/bookings/${bookingId}/complete`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -697,12 +709,13 @@ export default function BookingManagementPage() {
                                             <button onClick={() => openReviewModal(b)} className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] font-black uppercase tracking-widest">Approve</button>
                                         )}
                                         {!['COMPLETED', 'CANCELLED', 'DECLINED'].includes(b.bookingStatus) && (
-                                            <button onClick={() => { 
-                                                setSelectedBookingId(b.id); 
-                                                setCompletedInvoiceId(null); 
-                                                setShowCompleteModal(true);
-                                                fetchPricingTemplate(b.id, b.contact?.rateTier || 'STANDARD');
-                                            }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest">Complete & Bill</button>
+                                        <button onClick={() => { 
+                                            setSelectedBookingId(b.id); 
+                                            setInvoiceTargetId(b.id)
+                                            setCompletedInvoiceId(null); 
+                                            setShowCompleteModal(true);
+                                            fetchPricingTemplate(b.id, b.contact?.rateTier || 'STANDARD');
+                                        }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest">Complete & Bill</button>
                                         )}
                                         {b.bookingStatus === 'COMPLETED' && b.invoice?.id && (
                                             <Link href={`/admin/invoices/${b.invoice.id}`} className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-500/20">
@@ -724,7 +737,7 @@ export default function BookingManagementPage() {
             {/* Billing Completion Modal */}
             {showCompleteModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6 lg:pl-80 animate-in fade-in duration-300">
-                    <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={() => setShowCompleteModal(false)}></div>
+                                <div className="absolute inset-0 bg-background/80 backdrop-blur-md" onClick={closeCompleteModal}></div>
                     <div className="relative w-full max-w-3xl bg-card rounded-[2rem] sm:rounded-[3.5rem] shadow-3xl border border-border flex flex-col max-h-[90vh] overflow-hidden p-6 sm:p-12">
                         <div className="flex items-center gap-4 sm:gap-8 mb-8 sm:mb-12 flex-shrink-0">
                             <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-xl sm:rounded-[1.5rem] bg-foreground text-background flex items-center justify-center shadow-2xl flex-shrink-0">
@@ -734,7 +747,7 @@ export default function BookingManagementPage() {
                                 <h2 className="text-xl sm:text-3xl font-black text-foreground uppercase tracking-tight">Finalize & Bill</h2>
                                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Invoicing Metadata</p>
                             </div>
-                            <button onClick={() => setShowCompleteModal(false)} className="ml-auto h-10 w-10 sm:h-14 sm:w-14 rounded-xl bg-muted border border-border flex items-center justify-center">
+                            <button onClick={closeCompleteModal} className="ml-auto h-10 w-10 sm:h-14 sm:w-14 rounded-xl bg-muted border border-border flex items-center justify-center">
                                 <X className="h-5 w-5" />
                             </button>
                         </div>
@@ -861,11 +874,11 @@ export default function BookingManagementPage() {
                         <div className="mt-8 flex flex-col gap-4">
                             {error && <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 text-[8px] font-black uppercase text-center rounded-xl">{error}</div>}
                             <div className="flex gap-4">
-                                <button onClick={() => setShowCompleteModal(false)} className="flex-1 py-4 rounded-2xl bg-muted border border-border text-[10px] font-black uppercase tracking-widest">{completedInvoiceId ? 'Close' : 'Abort'}</button>
+                                <button onClick={closeCompleteModal} className="flex-1 py-4 rounded-2xl bg-muted border border-border text-[10px] font-black uppercase tracking-widest">{completedInvoiceId ? 'Close' : 'Abort'}</button>
                                 {completedInvoiceId ? (
                                     <Link href={`/admin/invoices/${completedInvoiceId}`} className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest text-center shadow-xl">View Final Invoice</Link>
                                 ) : (
-                                    <button onClick={() => handleComplete(selectedBookingId!)} className="flex-[2] py-4 rounded-2xl bg-foreground text-background text-[10px] font-black uppercase tracking-widest shadow-xl">Generate Invoice</button>
+                                    <button onClick={handleComplete} className="flex-[2] py-4 rounded-2xl bg-foreground text-background text-[10px] font-black uppercase tracking-widest shadow-xl">Generate Invoice</button>
                                 )}
                             </div>
                         </div>
@@ -931,27 +944,28 @@ export default function BookingManagementPage() {
                         <div className="p-4 bg-muted/40 border border-border rounded-2xl text-xs leading-relaxed mb-6 italic">{addonText || 'No specific signal data detected.'}</div>
                         <div className="flex gap-2 justify-end">
                             <button onClick={() => setShowAddonModal(false)} className="px-4 py-2 rounded-xl bg-muted text-[10px] font-black uppercase tracking-widest">Ignore</button>
-                            <button 
-                                onClick={async () => {
-                                    if (!selectedBookingId) return
-                                    setAddonSaving(true)
-                                    try {
-                                        const token = localStorage.getItem('token')
-                                        await fetch(`/api/bookings/${selectedBookingId}`, {
-                                            method: 'PATCH',
-                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                            body: JSON.stringify({ specialRequirements: addonText })
-                                        })
-                                        setBillingData(prev => ({ ...prev, notes: addonText }) as any)
-                                        setShowAddonModal(false)
-                                        fetchBookings()
-                                        setShowCompleteModal(true)
-                                    } finally {
-                                        setAddonSaving(false)
-                                    }
-                                }}
-                                className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest"
-                            >Accept & Bill</button>
+                                <button 
+                                    onClick={async () => {
+                                        if (!selectedBookingId) return
+                                        setInvoiceTargetId(selectedBookingId)
+                                        setAddonSaving(true)
+                                        try {
+                                            const token = localStorage.getItem('token')
+                                            await fetch(`/api/bookings/${selectedBookingId}`, {
+                                                method: 'PATCH',
+                                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                                body: JSON.stringify({ specialRequirements: addonText })
+                                            })
+                                            setBillingData(prev => ({ ...prev, notes: addonText }) as any)
+                                            setShowAddonModal(false)
+                                            fetchBookings()
+                                            setShowCompleteModal(true)
+                                        } finally {
+                                            setAddonSaving(false)
+                                        }
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest"
+                                >Accept & Bill</button>
                         </div>
                     </div>
                 </div>
