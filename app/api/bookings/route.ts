@@ -11,7 +11,7 @@ import { PricingEngine } from '@/lib/pricing-engine'
 const bookingSchema = z.object({
     contactId: z.string().optional(),
     serviceId: z.string(),
-    proceedingType: z.string(),
+    proceedingType: z.string().optional(), // derived server-side from service name
     jurisdiction: z.string().optional(),
     state: z.string().optional(),
     bookingDate: z.string(),
@@ -27,7 +27,7 @@ const bookingSchema = z.object({
     hasVideographer: z.boolean().optional(),
     hasInterpreter: z.boolean().optional(),
     hasExpert: z.boolean().optional(),
-})
+}).passthrough() // allow extra client fields like addOns, selectedAddOns (they are ignored)
 
 // GET all bookings
 export async function GET(request: NextRequest) {
@@ -55,6 +55,9 @@ export async function GET(request: NextRequest) {
         } else if (userRole === 'REPORTER') {
             where.reporterId = payload.userId
         } else {
+            if (!payload.email) {
+                return NextResponse.json({ bookings: [], total: 0, limit, offset, message: 'No email in token.' })
+            }
             const contact = await prisma.contact.findUnique({
                 where: { email: payload.email }
             })
@@ -213,7 +216,13 @@ export async function POST(request: NextRequest) {
         const bookingDate = new Date(data.bookingDate)
         const cancellationDeadline = BookingRulesService.calculateCancellationDeadline(bookingDate)
 
-        const rates = await PricingEngine.getApplicableRates(contactId, data.serviceId)
+        let rates
+        try {
+            rates = await PricingEngine.getApplicableRates(contactId, data.serviceId)
+        } catch (rateError: any) {
+            console.error('PricingEngine error:', rateError)
+            return NextResponse.json({ error: rateError.message || 'Could not resolve pricing for this service.' }, { status: 400 })
+        }
 
         const booking = await prisma.booking.create({
             data: {

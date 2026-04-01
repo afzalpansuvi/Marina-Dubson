@@ -38,6 +38,17 @@ import {
 import ProfileUpload from '@/app/components/ui/ProfileUpload'
 import LoadingOverlay from '@/app/components/ui/LoadingOverlay'
 
+const parseDateInput = (value?: string | Date | null) => {
+    if (!value) return null
+    const date = value instanceof Date ? value : new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+}
+
+const formatDateSafe = (value: string | Date | undefined | null, pattern: string, fallback = 'TBD') => {
+    const date = parseDateInput(value)
+    return date ? format(date, pattern) : fallback
+}
+
 export default function ClientPortal() {
     const router = useRouter()
     const searchParams = useSearchParams()
@@ -562,7 +573,7 @@ export default function ClientPortal() {
                                             key={booking.id}
                                             id={booking.bookingNumber}
                                             title={booking.service?.serviceName || booking.proceedingType}
-                                            date={format(new Date(booking.bookingDate), 'MMM d, yyyy')}
+                                            date={formatDateSafe(booking.bookingDate, 'MMM d, yyyy')}
                                             status={booking.bookingStatus}
                                             reporter={booking.reporter}
                                             onClick={() => booking.bookingStatus === 'ACCEPTED' && router.push(`/client/confirm/${booking.id}`)}
@@ -617,7 +628,7 @@ export default function ClientPortal() {
                                                 <h4 className="text-lg font-black text-foreground group-hover:text-primary transition-colors uppercase tracking-tight">
                                                     {booking.service?.serviceName || booking.proceedingType}
                                                 </h4>
-                                                <p className="text-xs font-medium text-muted-foreground">{format(new Date(booking.bookingDate), 'EEEE, MMMM dd, yyyy')}</p>
+                                                <p className="text-xs font-medium text-muted-foreground">{formatDateSafe(booking.bookingDate, 'EEEE, MMMM dd, yyyy')}</p>
                                                 {booking.reporter && (
                                                     <div className="flex items-center gap-2 mt-2">
                                                         <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center">
@@ -766,7 +777,7 @@ export default function ClientPortal() {
                                             <div>
                                                 <p className="text-xs font-black text-foreground group-hover:text-primary transition-colors uppercase">{doc.fileName}</p>
                                                 <p className="text-[9px] font-black text-muted-foreground uppercase mt-1">
-                                                    {doc.category.replace('_', ' ')} • {format(new Date(doc.createdAt), 'MMM dd')}
+                                                    {doc.category.replace('_', ' ')} • {formatDateSafe(doc.createdAt, 'MMM dd')}
                                                 </p>
                                             </div>
                                         </div>
@@ -835,7 +846,7 @@ export default function ClientPortal() {
                                     {rateServicePreview.map(service => (
                                         <div key={service.id} className="p-6 rounded-2xl border border-border bg-card">
                                             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground mb-2">{service.serviceName || 'Service'}</p>
-                                            <p className="text-2xl font-black text-foreground">${(service.defaultMinimumFee ?? service.minimumFee ?? 400).toFixed(2)}</p>
+                                            <p className="text-2xl font-black text-foreground">${Number(service.defaultMinimumFee ?? service.minimumFee ?? 400).toFixed(2)}</p>
                                             <p className="text-[9px] text-muted-foreground uppercase tracking-[0.3em] mt-2">Minimum Booking Fee</p>
                                         </div>
                                     ))}
@@ -861,7 +872,7 @@ export default function ClientPortal() {
                                                     <h4 className="text-lg font-black text-foreground group-hover:text-primary transition-colors uppercase tracking-tight">
                                                         {invoice.booking?.service?.serviceName || invoice.booking?.proceedingType || 'Services Rendering'}
                                                     </h4>
-                                                    <p className="text-xs font-medium text-muted-foreground">Issued: {format(new Date(invoice.invoiceDate), 'MMM dd, yyyy')}</p>
+                                                    <p className="text-xs font-medium text-muted-foreground">Issued: {formatDateSafe(invoice.invoiceDate, 'MMM dd, yyyy')}</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-8">
@@ -919,7 +930,7 @@ export default function ClientPortal() {
                                             }`}>
                                             <p className="text-[10px] uppercase font-black tracking-widest mb-1 text-muted-foreground">{msg.sender?.firstName || 'Support'}</p>
                                             <p>{msg.content}</p>
-                                            <p className="text-[9px] text-muted-foreground mt-1">{format(new Date(msg.createdAt), 'MMM d, hh:mm a')}</p>
+                                                    <p className="text-[9px] text-muted-foreground mt-1">{formatDateSafe(msg.createdAt, 'MMM d, hh:mm a')}</p>
                                         </div>
                                     </div>
                                 ))}
