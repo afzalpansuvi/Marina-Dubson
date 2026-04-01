@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
 import prisma from '@/lib/prisma'
 import { extractTokenFromHeader, verifyToken } from '@/lib/auth'
 import { z } from 'zod'
@@ -14,30 +15,41 @@ const addOnSchema = z.object({
 
 export async function GET() {
   try {
+    const defaultExpediteOptions = [
+      { label: 'Immediate', value: '1.25', category: 'EXPEDITE' as any, active: true },
+      { label: 'Next Day (Day 1)', value: '1.10', category: 'EXPEDITE' as any, active: true },
+      { label: '2 Days', value: '1.00', category: 'EXPEDITE' as any, active: true },
+      { label: '3 Days', value: '0.90', category: 'EXPEDITE' as any, active: true },
+      { label: '4 Days', value: '0.80', category: 'EXPEDITE' as any, active: true },
+      { label: '5 Days', value: '0.70', category: 'EXPEDITE' as any, active: true },
+      { label: '6 Days', value: '0.60', category: 'EXPEDITE' as any, active: true },
+      { label: '7 Days', value: '0.50', category: 'EXPEDITE' as any, active: true },
+      { label: '8 Days', value: '0.40', category: 'EXPEDITE' as any, active: true },
+      { label: '9 Days', value: '0.30', category: 'EXPEDITE' as any, active: true },
+      { label: '10 Days (Regular Days)', value: '0.20', category: 'EXPEDITE' as any, active: true }
+    ]
+
     let options = await prisma.addOnOption.findMany({
       orderBy: [{ category: 'asc' }, { label: 'asc' }]
     })
 
-    // Auto-seed if empty
-    if (options.length === 0) {
-      const defaultAddOns = [
+    const expediteOptionsFound = options.filter(o => o.category === 'EXPEDITE')
+    const hasDuplicates = new Set(expediteOptionsFound.map(o => o.label)).size !== expediteOptionsFound.length || expediteOptionsFound.length !== defaultExpediteOptions.length
+
+    if (options.length === 0 || hasDuplicates) {
+      if (hasDuplicates) {
+         await prisma.addOnOption.deleteMany({ where: { category: 'EXPEDITE' } })
+      }
+
+      const otherAddOns = [
         { label: 'Rough Draft', value: 'ROUGH_DRAFT', category: 'ADD_ON' as any, active: true },
         { label: 'Real-Time Streaming', value: 'REAL_TIME', category: 'ADD_ON' as any, active: true },
         { label: 'CART Services', value: 'CART_SERVICES', category: 'ADD_ON' as any, active: true },
-        { label: 'Immediate', value: '1.25', category: 'EXPEDITE' as any, active: true, description: '125% of Original Rate' },
-        { label: 'Next Day (1 Day)', value: '1.10', category: 'EXPEDITE' as any, active: true, description: '110% of Original Rate' },
-        { label: '2 Days', value: '1.00', category: 'EXPEDITE' as any, active: true, description: '100% of Original Rate' },
-        { label: '3 Days', value: '0.90', category: 'EXPEDITE' as any, active: true, description: '90% of Original Rate' },
-        { label: '4 Days', value: '0.80', category: 'EXPEDITE' as any, active: true, description: '80% of Original Rate' },
-        { label: '5 Days', value: '0.70', category: 'EXPEDITE' as any, active: true, description: '70% of Original Rate' },
-        { label: '6 Days', value: '0.60', category: 'EXPEDITE' as any, active: true, description: '60% of Original Rate' },
-        { label: '7 Days', value: '0.50', category: 'EXPEDITE' as any, active: true, description: '50% of Original Rate' },
-        { label: '8 Days', value: '0.40', category: 'EXPEDITE' as any, active: true, description: '40% of Original Rate' },
-        { label: '9 Days', value: '0.30', category: 'EXPEDITE' as any, active: true, description: '30% of Original Rate' },
-        { label: '10 Days (Regular)', value: '0.20', category: 'EXPEDITE' as any, active: true, description: '20% of Original Rate' }
       ]
 
-      for (const addon of defaultAddOns) {
+      const allToSeed = [...otherAddOns, ...defaultExpediteOptions]
+
+      for (const addon of allToSeed) {
         await prisma.addOnOption.upsert({
           where: { value: addon.value },
           update: addon,
@@ -50,12 +62,21 @@ export async function GET() {
       })
     }
 
-    return NextResponse.json({ options })
+    const uniqueOptions = options.reduce((acc: any[], current) => {
+      const isDuplicate = acc.find(item => item.label === current.label && item.category === current.category);
+      if (!isDuplicate) {
+        acc.push(current);
+      }
+      return acc;
+    }, []);
+
+    return NextResponse.json({ options: uniqueOptions })
   } catch (error) {
     console.error('Fetch add-on options error:', error)
     return NextResponse.json({ error: 'Unable to load add-on options' }, { status: 500 })
   }
 }
+
 
 export async function POST(request: NextRequest) {
   try {

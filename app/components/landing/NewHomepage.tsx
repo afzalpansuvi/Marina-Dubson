@@ -122,7 +122,7 @@ export function ServiceGrid() {
         {
             title: 'Professional Stenographic Reporting',
             desc: 'Elite reporters supported by production teams that verify transcripts for Deposition, EUO, Hearings, and Trials.',
-            bullets: ['Deposition', 'Arbitration/Hearings', 'Examinations Under Oath', 'Other bespoke legal matters'],
+            bullets: ['Deposition', 'Arbitration/Hearings', 'Hearing', 'Examinations Under Oath', 'CART', 'Other'],
             note: 'Select “Other” when your proceeding is custom—our concierge clarifies the scope before the calendar locks.',
             img: 'https://images.unsplash.com/photo-1521790945508-bf2a36314e85?auto=format&fit=crop&w=900&q=80'
         },

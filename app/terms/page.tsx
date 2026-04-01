@@ -13,7 +13,7 @@ export default function TermsPage() {
                         <p>
                             By initializing a booking on the MD portal, you agree to our assignment protocols.
                             Mininum fees apply to all court appearances ($400 baseline). Cancellation within 24 hours of
-                            deployment may trigger a severance fee.
+                            booking may trigger a severance fee.
                         </p>
                     </section>
 

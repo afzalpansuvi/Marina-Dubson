@@ -14,6 +14,7 @@ const contactSchema = z.object({
     customPricingEnabled: z.boolean().default(false),
     pricingNotes: z.string().optional(),
     notes: z.string().optional(),
+    rateTier: z.enum(['STANDARD', 'PRIVATE']).default('STANDARD'),
 })
 
 // GET all contacts

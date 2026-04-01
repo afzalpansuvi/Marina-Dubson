@@ -42,7 +42,7 @@ export default function NewBookingPage() {
         proceedingType: '',
         bookingDate: '',
         bookingTime: '09:00',
-        appearanceType: 'REMOTE' as 'REMOTE' | 'IN_PERSON',
+        appearanceType: '' as any, // Req 13: Must choose delivery method, no default.
         location: '',
         jurisdiction: '',
         specialRequirements: '',
@@ -60,6 +60,7 @@ export default function NewBookingPage() {
                 if (!token) return
 
                 const res = await fetch('/api/services', {
+                    cache: 'no-store',
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
 
@@ -89,6 +90,7 @@ export default function NewBookingPage() {
             try {
                 const token = localStorage.getItem('token')
                 const res = await fetch('/api/add-ons', {
+                    cache: 'no-store',
                     headers: token ? { 'Authorization': `Bearer ${token}` } : {}
                 })
                 if (res.ok) {
@@ -102,8 +104,15 @@ export default function NewBookingPage() {
         fetchOptions()
     }, [])
 
-    const activeAddOnOptions = addOnOptions.filter(o => o.active && o.category === 'ADD_ON')
-    const displayExpediteOptions = addOnOptions.filter(o => o.active && o.category === 'EXPEDITE').sort((a, b) => parseFloat(b.value) - parseFloat(a.value))
+    const activeAddOnOptions = addOnOptions.filter(o => 
+        o.active && 
+        o.category === 'ADD_ON' && 
+        ['ROUGH_DRAFT', 'REAL_TIME', 'CART_SERVICES'].includes(o.value)
+    )
+    const displayExpediteOptions = addOnOptions.filter(o => 
+        o.active && 
+        o.category === 'EXPEDITE'
+    ).sort((a, b) => parseFloat(b.value) - parseFloat(a.value))
 
     const toggleAddOnOption = (value: string) => {
         setFormData(prev => {
@@ -132,7 +141,10 @@ export default function NewBookingPage() {
                 },
                 body: JSON.stringify({
                     ...formData,
-                    addOns: finalAddOns
+                    addOns: finalAddOns,
+                    hasRough: formData.selectedAddOns.includes('ROUGH_DRAFT'),
+                    hasRealtime: formData.selectedAddOns.includes('REAL_TIME'),
+                    hasCart: formData.selectedAddOns.includes('CART_SERVICES')
                 })
             })
 
@@ -195,9 +207,12 @@ export default function NewBookingPage() {
                             </div>
                         </div>
 
-                        <div className="flex justify-end pt-10 border-t border-border/50">
+                        <div className="flex items-center justify-between pt-10 border-t border-border/50">
+                            <button onClick={() => router.push('/client/bookings')} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2">
+                                <ChevronLeft /> BACK
+                            </button>
                             <button onClick={() => setStep(2)} disabled={!formData.serviceId} className="bg-primary text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-foreground hover:text-white transition-all group disabled:opacity-40">
-                                Proceed to Logistics <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+                                FORWARD <ChevronRight className="group-hover:translate-x-1 transition-transform" />
                             </button>
                         </div>
                     </div>
@@ -241,10 +256,10 @@ export default function NewBookingPage() {
 
                         <div className="flex items-center justify-between pt-10 border-t border-border/50">
                             <button onClick={() => setStep(1)} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2">
-                                <ChevronLeft /> Back to Proceeding
+                                <ChevronLeft /> BACK
                             </button>
-                            <button onClick={() => setStep(3)} disabled={!formData.bookingDate} className="bg-primary text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-foreground transition-all disabled:opacity-40">
-                                Proceed to Add-ons <ChevronRight />
+                            <button onClick={() => setStep(3)} disabled={!formData.bookingDate || !formData.appearanceType} className="bg-primary text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-foreground transition-all disabled:opacity-40">
+                                FORWARD <ChevronRight />
                             </button>
                         </div>
                     </div>
@@ -255,13 +270,29 @@ export default function NewBookingPage() {
                         <div className="space-y-8">
                             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest ml-2">Add-on Enhancements</label>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                {activeAddOnOptions.map(option => (
+                                {activeAddOnOptions.filter(o => o.value !== 'CART_SERVICES').map(option => (
                                     <label key={option.value} className={`flex items-center gap-4 p-6 rounded-2xl border transition-all cursor-pointer ${formData.selectedAddOns.includes(option.value) ? 'bg-primary/5 border-primary shadow-inner' : 'bg-muted/50 border-gray-100'}`}>
                                         <input type="checkbox" className="h-5 w-5 accent-primary rounded-lg" checked={formData.selectedAddOns.includes(option.value)} onChange={() => toggleAddOnOption(option.value)} />
                                         <span className="text-[10px] font-black uppercase tracking-widest text-foreground">{option.label}</span>
                                     </label>
                                 ))}
                                 
+                                {/* Requirement 11: Distinct CART Services Option */}
+                                {activeAddOnOptions.find(o => o.value === 'CART_SERVICES') && (
+                                    <label className={`flex items-center gap-4 p-6 rounded-2xl border transition-all cursor-pointer ${formData.selectedAddOns.includes('CART_SERVICES') ? 'bg-indigo-50 border-indigo-500 shadow-inner' : 'bg-muted/50 border-gray-100'}`}>
+                                        <div className="h-10 w-10 rounded-xl bg-white border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                                            <MessageSquare className="h-5 w-5" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-3">
+                                                <input type="checkbox" className="h-5 w-5 accent-indigo-600 rounded-lg" checked={formData.selectedAddOns.includes('CART_SERVICES')} onChange={() => toggleAddOnOption('CART_SERVICES')} />
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-900 leading-none">CART Services (ADA)</span>
+                                                <span className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-600 text-[8px] font-black uppercase tracking-widest">Accessibility</span>
+                                            </div>
+                                        </div>
+                                    </label>
+                                )}
+
                                 {/* Expedite Manual Toggle */}
                                 <label className={`flex items-center gap-4 p-6 rounded-2xl border transition-all cursor-pointer ${isExpediteChecked ? 'bg-emerald-50 border-emerald-500 shadow-inner' : 'bg-muted/50 border-gray-100'}`}>
                                     <input type="checkbox" className="h-5 w-5 accent-emerald-600 rounded-lg" checked={isExpediteChecked} onChange={(e) => setIsExpediteChecked(e.target.checked)} />
@@ -290,7 +321,7 @@ export default function NewBookingPage() {
 
                         <div className="flex items-center justify-between pt-10 border-t border-border/50">
                             <button onClick={() => setStep(2)} className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:text-slate-900 transition-all flex items-center gap-2">
-                                <ChevronLeft /> Back to Logistics
+                                <ChevronLeft /> BACK
                             </button>
                             <button onClick={() => handleSubmit()} disabled={loading} className="bg-foreground text-white rounded-2xl px-12 py-5 text-[10px] font-black uppercase tracking-[0.3em] shadow-3xl flex items-center gap-4 hover:bg-primary transition-all disabled:opacity-40">
                                 {loading ? <Loader2 className="animate-spin" /> : <>Finalize Booking <CheckCircle className="h-4 w-4" /></>}

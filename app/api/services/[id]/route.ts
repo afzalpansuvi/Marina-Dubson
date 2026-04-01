@@ -18,6 +18,7 @@ const serviceSchema = z.object({
     expedite3Day: z.number().optional(),
     description: z.string().optional(),
     active: z.boolean().optional(),
+    isTemplate: z.boolean().optional(),
 })
 
 export async function PATCH(

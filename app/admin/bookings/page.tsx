@@ -256,12 +256,16 @@ export default function BookingManagementPage() {
         pages: 0,
         originalCopies: 1,
         additionalCopies: 0,
+        extraCertOriginals: 0,
         turnaroundDays: 10,
         realtimeDevices: 0,
         hasRough: false,
         hasVideographer: false,
         hasInterpreter: false,
         hasExpert: false,
+        hasReadAndSign: false,
+        hasMini: false,
+        hasIndex: false,
         hasCart: false,
         hasPaperDelivery: false,
         hasPreBilledReview: false,
@@ -273,6 +277,48 @@ export default function BookingManagementPage() {
         rateTier: 'STANDARD',
         overrides: {} as any
     })
+
+    const fetchPricingTemplate = async (bookingId: string, tier: string) => {
+        const booking = bookings.find(b => b.id === bookingId)
+        if (!booking) return;
+
+        try {
+            const token = localStorage.getItem('token')
+            const res = await fetch(`/api/pricing?contactId=${booking.contactId}&serviceId=${booking.serviceId}&rateTier=${tier}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (res.ok) {
+                const data = await res.json()
+                const tierRates = data.rates
+                setBillingData(prev => ({
+                    ...prev,
+                    rateTier: tier,
+                    overrides: {
+                        pageRate: tierRates.pageRate,
+                        copyRate: tierRates.copyRate,
+                        appearanceFee: booking.appearanceType === 'REMOTE' ? tierRates.appearanceFeeRemote : tierRates.appearanceFeeInPerson,
+                        congestionFee: tierRates.congestionFee,
+                        minimumFee: tierRates.minimumFee,
+                        roughRate: tierRates.roughRate,
+                        videographerRate: tierRates.videographerRate,
+                        interpreterRate: tierRates.interpreterRate,
+                        expertRate: tierRates.expertRate,
+                        readAndSignRate: tierRates.readAndSignRate,
+                        miniRate: tierRates.miniRate,
+                        indexRate: tierRates.indexRate,
+                        afterHoursRate: tierRates.afterHoursRate,
+                        waitTimeRate: tierRates.waitTimeRate,
+                        cartRate: tierRates.cartRate,
+                    }
+                }))
+            } else {
+                setBillingData(prev => ({ ...prev, rateTier: tier }))
+            }
+        } catch (err) {
+            console.error(err)
+            setBillingData(prev => ({ ...prev, rateTier: tier }))
+        }
+    }
 
     const handleComplete = async (id: string) => {
         setIsPending(true)
@@ -310,14 +356,13 @@ export default function BookingManagementPage() {
         // Resolve expedite logic
         const rawBaseRate = (billingData as any).overrides?.pageRate ?? (booking as any).lockedPageRate ?? (billingData.rateTier === 'PRIVATE' ? 4.75 : 4.25)
         
-        // Task 4: FIXED — expedite multiplier is now a direct scale of the page rate
-        // Rate card: immediate=130%, 1-day=115%, 2-day=100% (base), ..., 10-day=50%
-        const getExpMultiplier = (days: number) => ({
-            0: 1.30, 1: 1.15, 2: 1.00, 3: 0.95, 4: 0.90,
-            5: 0.85, 6: 0.80, 7: 0.75, 8: 0.70, 9: 0.65, 10: 0.50
-        } as Record<number, number>)[days] ?? 1.00
-        const expediteMultiplier = getExpMultiplier(billingData.turnaroundDays)
-        const effectivePageRate = rawBaseRate * expediteMultiplier
+        // Expedite Scale (% of Original Rate) applied as additive surcharge
+        const getExpPercentage = (days: number) => ({
+            0: 1.25, 1: 1.10, 2: 1.00, 3: 0.90, 4: 0.80,
+            5: 0.70, 6: 0.60, 7: 0.50, 8: 0.40, 9: 0.30, 10: 0.20
+        } as Record<number, number>)[days] ?? 0.20
+        const expeditePercentage = getExpPercentage(billingData.turnaroundDays)
+        const effectivePageRate = rawBaseRate * (1 + expeditePercentage)
 
         const rates = {
             pageRate: effectivePageRate,
@@ -332,6 +377,9 @@ export default function BookingManagementPage() {
             videoRate: (billingData as any).overrides?.videographerRate ?? 1.25,
             interpreterRate: (billingData as any).overrides?.interpreterRate ?? 1.25,
             expertRate: (billingData as any).overrides?.expertRate ?? 2.00,
+            readAndSignRate: (billingData as any).overrides?.readAndSignRate ?? 1.00,
+            miniRate: (billingData as any).overrides?.miniRate ?? 1.00,
+            indexRate: (billingData as any).overrides?.indexRate ?? 1.00,
             afterHoursRate: (billingData as any).overrides?.afterHoursRate ?? 125,
             waitTimeRate: (billingData as any).overrides?.waitTimeRate ?? 100,
             cartRate: (billingData as any).overrides?.cartRate ?? 2.00,
@@ -365,6 +413,12 @@ export default function BookingManagementPage() {
         // Operations (Base + Congestion)
         breakdown.push({ label: 'Service & Appearance', value: rates.appearance + rates.congestion, detail: 'Base + Congestion Fee' })
         currentBase += (rates.appearance + rates.congestion)
+
+        if (billingData.extraCertOriginals > 0) {
+            const extraCertVal = billingData.pages * (rates.pageRate * 0.75) * billingData.extraCertOriginals
+            breakdown.push({ label: 'Extra Certified Original(s)', value: extraCertVal, detail: `${billingData.pages} pgs × $${(rates.pageRate * 0.75).toFixed(2)}/pg × ${billingData.extraCertOriginals} copy(s)` })
+            currentBase += extraCertVal
+        }
 
         // Apply Minimum Fee floor to BASE
         const baseTotal = Math.max(currentBase, rates.minFee)
@@ -643,7 +697,12 @@ export default function BookingManagementPage() {
                                             <button onClick={() => openReviewModal(b)} className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] font-black uppercase tracking-widest">Approve</button>
                                         )}
                                         {!['COMPLETED', 'CANCELLED', 'DECLINED'].includes(b.bookingStatus) && (
-                                            <button onClick={() => { setSelectedBookingId(b.id); setCompletedInvoiceId(null); setShowCompleteModal(true) }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest">Complete & Bill</button>
+                                            <button onClick={() => { 
+                                                setSelectedBookingId(b.id); 
+                                                setCompletedInvoiceId(null); 
+                                                setShowCompleteModal(true);
+                                                fetchPricingTemplate(b.id, b.contact?.rateTier || 'STANDARD');
+                                            }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest">Complete & Bill</button>
                                         )}
                                         {b.bookingStatus === 'COMPLETED' && b.invoice?.id && (
                                             <Link href={`/admin/invoices/${b.invoice.id}`} className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-500/20">
@@ -689,8 +748,8 @@ export default function BookingManagementPage() {
                                 <div className="flex-1 space-y-2">
                                     <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest">Rate Registry Template</p>
                                     <div className="flex gap-2">
-                                        <button onClick={() => setBillingData({ ...billingData, rateTier: 'STANDARD' })} className={`flex-1 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${billingData.rateTier === 'STANDARD' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>Standard</button>
-                                        <button onClick={() => setBillingData({ ...billingData, rateTier: 'PRIVATE' })} className={`flex-1 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${billingData.rateTier === 'PRIVATE' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>Private Client</button>
+                                        <button onClick={() => fetchPricingTemplate(selectedBookingId!, 'STANDARD')} className={`flex-1 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${billingData.rateTier === 'STANDARD' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>Standard</button>
+                                        <button onClick={() => fetchPricingTemplate(selectedBookingId!, 'PRIVATE')} className={`flex-1 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${billingData.rateTier === 'PRIVATE' ? 'bg-primary text-primary-foreground' : 'bg-card'}`}>Private Client</button>
                                     </div>
                                 </div>
                             </div>
@@ -717,14 +776,18 @@ export default function BookingManagementPage() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black ml-2 text-muted-foreground uppercase tracking-widest">Page Count</label>
-                                    <input type="number" value={billingData.pages} onChange={(e) => setBillingData({...billingData, pages: parseInt(e.target.value) || 0})} className="w-full px-6 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
+                                    <input type="number" value={billingData.pages} onChange={(e) => setBillingData({...billingData, pages: parseInt(e.target.value) || 0})} className="w-full px-4 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black ml-2 text-muted-foreground uppercase tracking-widest">Addl. Copies</label>
-                                    <input type="number" value={billingData.additionalCopies} onChange={(e) => setBillingData({...billingData, additionalCopies: parseInt(e.target.value) || 0})} className="w-full px-6 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
+                                    <input type="number" value={billingData.additionalCopies} onChange={(e) => setBillingData({...billingData, additionalCopies: parseInt(e.target.value) || 0})} className="w-full px-4 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black ml-2 text-muted-foreground uppercase tracking-widest leading-none block">Extra Cert<br/>Orig</label>
+                                    <input type="number" value={billingData.extraCertOriginals} onChange={(e) => setBillingData({...billingData, extraCertOriginals: parseInt(e.target.value) || 0})} className="w-full px-4 py-4 rounded-2xl bg-muted/50 border border-border font-black text-2xl text-center outline-none focus:ring-4 focus:ring-primary/10 transition-all text-foreground" />
                                 </div>
                             </div>
 
@@ -733,6 +796,9 @@ export default function BookingManagementPage() {
                                 <CheckboxItem label="Videography" checked={billingData.hasVideographer} onChange={(v) => setBillingData({ ...billingData, hasVideographer: v })} />
                                 <CheckboxItem label="Interpreter" checked={billingData.hasInterpreter} onChange={(v) => setBillingData({ ...billingData, hasInterpreter: v })} />
                                 <CheckboxItem label="Expert Witness" checked={billingData.hasExpert} onChange={(v) => setBillingData({ ...billingData, hasExpert: v })} />
+                                <CheckboxItem label="Read & Sign" checked={billingData.hasReadAndSign} onChange={(v) => setBillingData({ ...billingData, hasReadAndSign: v })} />
+                                <CheckboxItem label="Mini Transcript" checked={billingData.hasMini} onChange={(v) => setBillingData({ ...billingData, hasMini: v })} />
+                                <CheckboxItem label="Index" checked={billingData.hasIndex} onChange={(v) => setBillingData({ ...billingData, hasIndex: v })} />
                                 <CheckboxItem label="CART Services" checked={billingData.hasCart} onChange={(v) => setBillingData({ ...billingData, hasCart: v })} />
                                 <CheckboxItem label="Paper Delivery (+$150)" checked={billingData.hasPaperDelivery} onChange={(v) => setBillingData({ ...billingData, hasPaperDelivery: v })} />
                                 <CheckboxItem label="Pre-billed Review (+$1/pg)" checked={billingData.hasPreBilledReview} onChange={(v) => setBillingData({ ...billingData, hasPreBilledReview: v })} />

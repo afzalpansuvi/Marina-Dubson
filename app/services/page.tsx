@@ -29,7 +29,7 @@ const PRIMARY_SERVICES = [
         title: 'CART & Live Captioning',
         summary: 'Communication Access Real-Time Translation engineered for ADA compliance with secure viewer links and glossary-backed captioners.',
         tag: 'Remote • Hybrid • On-site',
-        highlight: 'CART deployments require the “Other” proceeding option so you can summarize the event context. We’ll connect the right captioner and glossary ahead of time.',
+        highlight: 'CART activations require the “Other” proceeding option so you can summarize the event context. We’ll connect the right captioner and glossary ahead of time.',
         callout: 'Caption + transcript delivery • Captured metadata • Glossary support.'
     }
 ]

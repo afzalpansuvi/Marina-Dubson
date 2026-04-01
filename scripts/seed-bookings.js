@@ -42,7 +42,7 @@ async function main() {
             bookingTime: '02:00 PM',
             location: '123 Law St, New York',
             appearanceType: 'IN_PERSON',
-            proceedingType: 'Arbitration',
+            proceedingType: 'Arbitration/Hearings',
             bookingStatus: 'CONFIRMED',
             notes: 'City of New York vs Construction Corp'
         }

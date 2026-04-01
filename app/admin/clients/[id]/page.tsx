@@ -46,6 +46,18 @@ export default function UserProfilePage() {
     const [services, setServices] = useState<any[]>([])
 
     // Custom Pricing state
+    const [customPricing, setCustomPricing] = useState<any[]>([])
+    const [showPricingModal, setShowPricingModal] = useState(false)
+    const [newPricing, setNewPricing] = useState({ 
+        serviceId: '', 
+        pageRate: '', 
+        appearanceFeeRemote: '', 
+        appearanceFeeInPerson: '', 
+        realtimeFee: '', 
+        minimumFee: '', 
+        notes: '' 
+    })
+    const [savingPricing, setSavingPricing] = useState(false)
     const [isPricingExpanded, setIsPricingExpanded] = useState(false)
 
     useEffect(() => {
@@ -89,12 +101,28 @@ export default function UserProfilePage() {
         }
     }
 
+    const fetchCustomPricing = useCallback(async () => {
+        try {
+            const token = localStorage.getItem('token')
+            const res = await fetch(`/api/admin/users/${id}/pricing`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setCustomPricing(data)
+            }
+        } catch (error) {
+            console.error('Failed to fetch custom pricing:', error)
+        }
+    }, [id])
+
     useEffect(() => {
         if (id) {
             fetchUser()
             fetchServices()
+            fetchCustomPricing()
         }
-    }, [id, fetchUser])
+    }, [id, fetchUser, fetchCustomPricing])
 
     const handleUpdateProfile = async () => {
         try {
@@ -185,6 +213,53 @@ export default function UserProfilePage() {
             fetchUser()
         } catch (error) {
             console.error('Delete task error:', error)
+        }
+    }
+
+    const handleCreatePricing = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setSavingPricing(true)
+        try {
+            const token = localStorage.getItem('token')
+            const res = await fetch(`/api/admin/users/${id}/pricing`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(newPricing)
+            })
+
+            if (res.ok) {
+                setShowPricingModal(false)
+                setNewPricing({ 
+                    serviceId: '', pageRate: '', appearanceFeeRemote: '', 
+                    appearanceFeeInPerson: '', realtimeFee: '', minimumFee: '', notes: '' 
+                })
+                fetchCustomPricing()
+                fetchUser()
+            }
+        } catch (error) {
+            console.error('Create pricing error:', error)
+        } finally {
+            setSavingPricing(false)
+        }
+    }
+
+    const handleDeletePricing = async (pricingId: string) => {
+        if (!confirm('Are you sure you want to delete this custom price?')) return
+        try {
+            const token = localStorage.getItem('token')
+            await fetch(`/api/admin/users/${id}/pricing?pricingId=${pricingId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            fetchCustomPricing()
+            fetchUser()
+        } catch (error) {
+            console.error('Delete pricing error:', error)
         }
     }
 
@@ -293,7 +368,7 @@ export default function UserProfilePage() {
                          <div className="glass-panel p-10 rounded-[3rem] border border-blue-100 bg-blue-50/20 shadow-lg group">
                             <div className="flex items-center justify-between mb-8">
                                 <h3 className="text-sm font-black text-blue-800 uppercase tracking-[0.3em] flex items-center gap-3">
-                                    <DollarSign className="h-4 w-4" /> Pricing Portfolio
+                                    <DollarSign className="h-4 w-4" /> Global Pricing Tier
                                 </h3>
                                 <button
                                     onClick={() => setIsPricingExpanded(!isPricingExpanded)}
@@ -305,42 +380,43 @@ export default function UserProfilePage() {
 
                             <div className="space-y-6">
                                 <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-blue-100 shadow-sm">
-                                    <span className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Custom Pricing Tier</span>
+                                    <span className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Rate Overrides</span>
                                     <button
                                         onClick={() => handleUpdateCustomPricing('customPricingEnabled', !editData.contact?.customPricingEnabled)}
                                         disabled={!isEditing}
-                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${editData.contact?.customPricingEnabled ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400'}`}
+                                        className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${editData.contact?.customPricingEnabled ? 'bg-emerald-500 text-white shadow-lg' : 'bg-gray-100 text-gray-400'}`}
                                     >
-                                        {editData.contact?.customPricingEnabled ? 'ENABLED' : 'DISABLED'}
+                                        {editData.contact?.customPricingEnabled ? 'ACTIVE' : 'INACTIVE'}
                                     </button>
                                 </div>
 
-                                {editData.contact?.customPricingEnabled && (
-                                    <div className="space-y-4 animate-in slide-in-from-top-4 duration-500">
-                                        <div className="p-5 bg-white rounded-2xl border border-blue-100 space-y-4 shadow-inner">
-                                            <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mb-2 italic flex items-center gap-2">
-                                                <Target className="h-3 w-3" /> Target Overrides (Requirement 8)
-                                            </p>
-                                            <div className="grid grid-cols-1 gap-4">
-                                                <div className="space-y-1">
-                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Standard Page Rate (Client-Specific)</label>
-                                                    <input
+                                <div className="space-y-4 animate-in slide-in-from-top-4 duration-500">
+                                    <div className="p-5 bg-white rounded-2xl border border-blue-100 space-y-6 shadow-inner">
+                                        <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest mb-2 italic flex items-center gap-2">
+                                            <Target className="h-3 w-3" /> Default Rate Protocol
+                                        </p>
+                                        
+                                        <div className="flex bg-gray-50 p-1 rounded-2xl border border-gray-100">
+                                            {(['STANDARD', 'PRIVATE'] as const).map(tier => {
+                                                const active = (editData.contact?.rateTier || 'STANDARD') === tier
+                                                return (
+                                                    <button
+                                                        key={tier}
                                                         disabled={!isEditing}
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-full h-11 px-4 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-100 outline-none"
-                                                        placeholder="4.25"
-                                                        value={editData.contact?.pricingNotes || ''} // Fallback for demonstration
-                                                        onChange={(e) => handleUpdateCustomPricing('pricingNotes', e.target.value)}
-                                                    />
-                                                </div>
-                                            </div>
+                                                        onClick={() => handleUpdateCustomPricing('rateTier', tier)}
+                                                        className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all ${active ? 'bg-primary text-white shadow-xl' : 'text-gray-400 hover:text-gray-600'}`}
+                                                    >
+                                                        {tier}
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.2em] leading-relaxed">
-                                            Pricing changes here apply globally across this client's bookings without affecting service menu names. Fulfills Req #8.
+
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.2em] leading-relaxed px-2 text-center">
+                                            This sets the baseline catalog for all services booked by this operative.
                                         </p>
                                     </div>
-                                )}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -515,6 +591,59 @@ export default function UserProfilePage() {
                         <StatsCard title="Completed Objectives" value={user.assignedTasks?.filter((t: any) => t.status === 'COMPLETED')?.length || 0} icon={<CheckCircle className="text-primary h-6 w-6" />} />
                         <StatsCard title="Active Assignments" value={user.assignedTasks?.filter((t: any) => t.status !== 'COMPLETED')?.length || 0} icon={<Target className="text-amber-500 h-6 w-6" />} />
                     </div>
+
+                    {/* Service Pricing Matrix (Requirement 8) */}
+                    {isClient && (
+                        <div className="glass-panel rounded-[3.5rem] overflow-hidden border border-blue-50 bg-blue-50/5 shadow-xl">
+                            <div className="px-10 py-8 border-b border-blue-100 bg-blue-50/30 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-sm font-black text-blue-900 uppercase tracking-[0.3em] mb-1">Service Pricing Matrix</h3>
+                                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest italic">Client-specific service pricing overflows</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowPricingModal(true)}
+                                    className="h-12 w-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl"
+                                >
+                                    <Plus className="h-6 w-6" />
+                                </button>
+                            </div>
+                            <div className="p-10">
+                                {customPricing.length === 0 ? (
+                                    <div className="py-20 text-center">
+                                        <DollarSign className="h-16 w-16 text-blue-100 mx-auto mb-6" />
+                                        <p className="text-xs font-black text-blue-300 uppercase tracking-widest italic">No Custom Overrides Defined</p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {customPricing.map((pricing: any) => {
+                                            const service = services.find(s => s.id === pricing.serviceId)
+                                            return (
+                                                <div key={pricing.id} className="p-6 bg-white rounded-3xl border border-blue-100 group hover:border-blue-300 transition-all shadow-sm">
+                                                    <div className="flex items-start justify-between mb-4">
+                                                        <div className="space-y-1">
+                                                            <h4 className="text-lg font-black text-slate-900 uppercase tracking-tight">{service?.serviceName || 'Custom Service'}</h4>
+                                                            <div className="flex gap-4 overflow-x-auto no-scrollbar pt-2">
+                                                                {pricing.pageRate && <div className="flex flex-col"><span className="text-[7px] font-black text-slate-400 uppercase">Page</span><span className="text-[11px] font-bold text-blue-600">${pricing.pageRate}</span></div>}
+                                                                {pricing.appearanceFeeRemote && <div className="flex flex-col"><span className="text-[7px] font-black text-slate-400 uppercase">Remote</span><span className="text-[11px] font-bold text-blue-600">${pricing.appearanceFeeRemote}</span></div>}
+                                                                {pricing.appearanceFeeInPerson && <div className="flex flex-col"><span className="text-[7px] font-black text-slate-400 uppercase">In-Person</span><span className="text-[11px] font-bold text-blue-600">${pricing.appearanceFeeInPerson}</span></div>}
+                                                                {pricing.minimumFee && <div className="flex flex-col"><span className="text-[7px] font-black text-slate-400 uppercase">Min</span><span className="text-[11px] font-bold text-blue-600">${pricing.minimumFee}</span></div>}
+                                                            </div>
+                                                        </div>
+                                                        <button onClick={() => handleDeletePricing(pricing.id)} className="p-2 text-slate-200 hover:text-rose-600 transition-colors opacity-10 group-hover:opacity-100">
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                    {pricing.notes && (
+                                                        <p className="text-[10px] text-slate-500 italic border-t border-slate-50 pt-2">{pricing.notes}</p>
+                                                    )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -551,6 +680,65 @@ export default function UserProfilePage() {
                                 <button type="button" onClick={() => setShowTaskModal(false)} className="flex-1 py-5 bg-slate-50 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400">Abort</button>
                                 <button type="submit" disabled={savingTask} className="flex-[2] py-5 bg-primary text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-primary/20 flex items-center justify-center gap-3">
                                     {savingTask ? <Loader2 className="animate-spin" /> : <Save className="h-4 w-4" />} Save Objective
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Custom Pricing Modal */}
+            {showPricingModal && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 backdrop-blur-md bg-slate-900/40">
+                    <div className="relative w-full max-w-2xl bg-white rounded-[3rem] p-12 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between mb-10">
+                            <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter italic">Service Pricing Override</h2>
+                            <button onClick={() => setShowPricingModal(false)} className="p-3 rounded-xl bg-slate-50 text-slate-400 hover:text-slate-900"><X className="h-6 w-6"/></button>
+                        </div>
+                        <form onSubmit={handleCreatePricing} className="space-y-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Select Target Service</label>
+                                <select 
+                                    required 
+                                    className="luxury-input h-14" 
+                                    value={newPricing.serviceId} 
+                                    onChange={e => setNewPricing({...newPricing, serviceId: e.target.value})}
+                                >
+                                    <option value="">Choose Service Matrix...</option>
+                                    {services.map(s => (
+                                        <option key={s.id} value={s.id}>{s.serviceName} ({s.category})</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Page Rate ($)</label>
+                                    <input type="number" step="0.01" className="luxury-input h-12" placeholder="4.25" value={newPricing.pageRate} onChange={e => setNewPricing({...newPricing, pageRate: e.target.value})} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Min Fee ($)</label>
+                                    <input type="number" step="0.01" className="luxury-input h-12" placeholder="400" value={newPricing.minimumFee} onChange={e => setNewPricing({...newPricing, minimumFee: e.target.value})} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">Remote ($)</label>
+                                    <input type="number" step="0.01" className="luxury-input h-12" placeholder="100" value={newPricing.appearanceFeeRemote} onChange={e => setNewPricing({...newPricing, appearanceFeeRemote: e.target.value})} />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-2">In-Person ($)</label>
+                                    <input type="number" step="0.01" className="luxury-input h-12" placeholder="200" value={newPricing.appearanceFeeInPerson} onChange={e => setNewPricing({...newPricing, appearanceFeeInPerson: e.target.value})} />
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Pricing Protocol Notes</label>
+                                <textarea className="luxury-input min-h-[100px] py-6 resize-none" placeholder="Reasoning for deviation from standard matrix..." value={newPricing.notes} onChange={e => setNewPricing({...newPricing, notes: e.target.value})} />
+                            </div>
+
+                            <div className="flex gap-4 pt-4">
+                                <button type="button" onClick={() => setShowPricingModal(false)} className="flex-1 py-5 bg-slate-50 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400">Cancel</button>
+                                <button type="submit" disabled={savingPricing} className="flex-[2] py-5 bg-blue-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-blue-200 flex items-center justify-center gap-3">
+                                    {savingPricing ? <Loader2 className="animate-spin" /> : <DollarSign className="h-4 w-4" />} Commit Override
                                 </button>
                             </div>
                         </form>

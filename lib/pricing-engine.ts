@@ -20,6 +20,9 @@ export interface BookingRates {
     expedite1Day: number
     expedite2Day: number
     expedite3Day: number
+    readAndSignRate: number
+    miniRate: number
+    indexRate: number
     rateTier: string
 }
 
@@ -35,6 +38,8 @@ export class PricingEngine {
                 }
             }
         })
+
+        const activeTier = tier !== 'STANDARD' ? tier : ((contact as any)?.rateTier || 'STANDARD')
 
         const service = await prisma.service.findUnique({
             where: { id: serviceId }
@@ -60,17 +65,35 @@ export class PricingEngine {
             afterHoursRate: 125,
             waitTimeRate: 100,
             cartRate: 2.00,
-            minimumFee: service.defaultMinimumFee || 500.00, // Task 6: $500 standard cover charge floor
+            minimumFee: service.defaultMinimumFee || 400.00, // $400 standard cover charge floor
             expediteImmediate: service.expediteImmediate || 1.30,
             expedite1Day: service.expedite1Day || 1.15,
             expedite2Day: service.expedite2Day || 1.00,
             expedite3Day: service.expedite3Day || 0.95,
+            readAndSignRate: 1.00,
+            miniRate: 1.00,
+            indexRate: 1.00,
             rateTier: tier
         }
 
         // Apply Private Tier if requested
         const s = service as any
-        if (tier === 'PRIVATE') {
+        const isArb = service.serviceName?.toLowerCase().includes('arbitration') || service.serviceName?.toLowerCase().includes('hearing')
+        
+        if (activeTier === 'PRIVATE') {
+            rates.pageRate = isArb ? 6.75 : 4.75;
+            rates.appearanceFeeInPerson = 200.00;
+            rates.appearanceFeeRemote = 100.00;
+            rates.copyRate = 2.875; // 0+2 copies = 5.75
+            rates.minimumFee = 400.00;
+            rates.roughRate = 1.75;
+            rates.realtimeFee = 2.00;
+            rates.afterHoursRate = 100.00;
+            rates.waitTimeRate = 100.00;
+            rates.readAndSignRate = 1.00;
+            rates.miniRate = 1.00;
+            rates.indexRate = 1.00;
+
             if (s.privatePageRate !== null && s.privatePageRate !== undefined) rates.pageRate = s.privatePageRate
             if (s.privateAppearanceFeeRemote !== null && s.privateAppearanceFeeRemote !== undefined) rates.appearanceFeeRemote = s.privateAppearanceFeeRemote
             if (s.privateAppearanceFeeInPerson !== null && s.privateAppearanceFeeInPerson !== undefined) rates.appearanceFeeInPerson = s.privateAppearanceFeeInPerson
@@ -80,6 +103,12 @@ export class PricingEngine {
             if (s.privateCopyRate !== null && s.privateCopyRate !== undefined) rates.copyRate = s.privateCopyRate
             if (s.privateWaitTimeRate !== null && s.privateWaitTimeRate !== undefined) rates.waitTimeRate = s.privateWaitTimeRate
             if (s.privateAfterHoursRate !== null && s.privateAfterHoursRate !== undefined) rates.afterHoursRate = s.privateAfterHoursRate
+        }
+        
+        // Ensure Arbitration/Realtime minimum appearance is respected globally
+        if (isArb || (rates.realtimeFee && rates.realtimeFee > 0)) {
+            rates.appearanceFeeInPerson = Math.max(rates.appearanceFeeInPerson, 300);
+            rates.appearanceFeeRemote = Math.max(rates.appearanceFeeRemote, 300);
         }
 
         // Apply client-type defaults
@@ -123,30 +152,29 @@ export class PricingEngine {
         return rates
     }
 
-    static getExpediteMultiplier(days: number): number {
-        // Task 4: Matches Full Private Client Rate Sheet exactly
-        // These are DIRECT multipliers of base page rate (not additive)
-        // 2-day = 100% of base (standard), immediate = 130%, 10-day = 50% (discount)
+    static getExpeditePercentage(days: number): number {
+        // Expedite Scale (% of Original Rate)
         const scale: Record<number, number> = {
-            0: 1.30,  // Immediate: 130% of base
-            1: 1.15,  // 1 business day: 115%
-            2: 1.00,  // 2 business days: 100% (standard base)
-            3: 0.95,  // 3 days: 95%
-            4: 0.90,  // 4 days: 90%
-            5: 0.85,  // 5 days: 85%
-            6: 0.80,  // 6 days: 80%
-            7: 0.75,  // 7 days: 75%
-            8: 0.70,  // 8 days: 70%
-            9: 0.65,  // 9 days: 65%
-            10: 0.50  // 10 business days (standard/regular): 50%
+            0: 1.25,  // Immediate: 125%
+            1: 1.10,  // 1 business day: 110%
+            2: 1.00,  // 2 business days: 100%
+            3: 0.90,  // 3 days: 90%
+            4: 0.80,  // 4 days: 80%
+            5: 0.70,  // 5 days: 70%
+            6: 0.60,  // 6 days: 60%
+            7: 0.50,  // 7 days: 50%
+            8: 0.40,  // 8 days: 40%
+            9: 0.30,  // 9 days: 30%
+            10: 0.20  // 10 business days (regular): 20%
         }
-        return scale[days] ?? 1.00
+        return scale[days] ?? 0.20
     }
 
     static calculateTotal(rates: BookingRates, data: {
         pages: number,
         originalCopies: number,
         additionalCopies: number,
+        extraCertOriginals?: number,
         turnaroundDays?: number,
         realtimeDevices?: number,
         hasRough?: boolean,
@@ -160,31 +188,44 @@ export class PricingEngine {
         hasPaperDelivery?: boolean,
         isOnRecordBust?: boolean,
         hasPreBilledReview?: boolean,
+        hasReadAndSign?: boolean,
+        hasMini?: boolean,
+        hasIndex?: boolean,
         locationBaseFee?: number
     }): { subtotal: number, total: number } {
         const isPrivate = rates.rateTier === 'PRIVATE'
         
         // Task 4: FIXED expedite formula — multiply rate by scale directly (not additive)
-        // Formula: effectivePageRate = basePageRate × expediteMultiplier
-        // 2-day (1.00) = base rate, immediate (1.30) = 30% surcharge, 10-day (0.50) = 50% discount
-        const expediteMultiplier = data.turnaroundDays !== undefined ? this.getExpediteMultiplier(data.turnaroundDays) : 1.00
-        const effectivePageRate = rates.pageRate * expediteMultiplier
+        // Formula: Expedite Charge = (Original rate) × (%)
+        const expeditePercentage = data.turnaroundDays !== undefined ? this.getExpeditePercentage(data.turnaroundDays) : 0.20
+        const effectivePageRate = rates.pageRate * (1 + expeditePercentage)
 
         // BASE CHARGES: Appearance, Congestion, Pages, Copies
+        let appearanceFee = (data.isRemote ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson)
+
+        // Ensure Arbitration/Realtime minimum appearance is respected
+        if (data.realtimeDevices && data.realtimeDevices > 0 || (rates as any).serviceName?.toLowerCase().includes('arbitration') || (rates as any).serviceName?.toLowerCase().includes('hearing')) {
+            appearanceFee = Math.max(appearanceFee, 300)
+        }
+
         let baseSubtotal = 0
         baseSubtotal += (data.pages * effectivePageRate * data.originalCopies)
         baseSubtotal += (data.pages * rates.copyRate * data.additionalCopies)
-        baseSubtotal += (data.isRemote ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson)
+        
+        // Extra Certified Original (75% of Base Original Rate)
+        if (data.extraCertOriginals && data.extraCertOriginals > 0) {
+            baseSubtotal += (data.pages * (rates.pageRate * 0.75) * data.extraCertOriginals)
+        }
+        
+        baseSubtotal += appearanceFee
         baseSubtotal += isPrivate ? 0 : rates.congestionFee
 
-        // Task 6: Minimum fee — $500 standard, $750 private (cover charge floors)
-        let minFee = isPrivate ? Math.max(rates.minimumFee, 750) : Math.max(rates.minimumFee, 500)
+        // Base Coverage ($400 Bust/Min)
+        let minFee = isPrivate ? Math.max(rates.minimumFee, 400) : rates.minimumFee
         if (isPrivate && data.isOnRecordBust) {
             minFee = Math.max(minFee, 500) // Statement on record / Bust: $500 private minimum
         }
 
-        // Task 17: Arbitration/Hearings — enforce $300 minimum appearance
-        // (the service already has $300 appearance in DB; this guards against custom overrides going below)
         const baseTotal = Math.max(baseSubtotal, minFee)
 
         // PREMIUM EXTRAS: These add ON TOP of the base coverage
@@ -205,6 +246,9 @@ export class PricingEngine {
         if (data.hasVideographer) extrasTotal += (data.pages * rates.videographerRate)
         if (data.hasInterpreter) extrasTotal += (data.pages * rates.interpreterRate)
         if (data.hasExpert) extrasTotal += (data.pages * rates.expertRate)
+        if (data.hasReadAndSign) extrasTotal += (data.pages * rates.readAndSignRate)
+        if (data.hasMini) extrasTotal += (data.pages * rates.miniRate)
+        if (data.hasIndex) extrasTotal += (data.pages * rates.indexRate)
 
         // 4. Hourly Surcharges & Extras
         // After-hours: 50% of original rate + $100/hr

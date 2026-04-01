@@ -134,14 +134,14 @@ export default function ClientPortal() {
             }
 
             const [userRes, bookingsRes, servicesRes, docsRes, invoicesRes, messagesRes, addOnsRes, policyRes] = await Promise.all([
-                fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/bookings', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/services', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/documents', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/invoices', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/messages', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/add-ons', { headers: { 'Authorization': `Bearer ${token}` } }),
-                fetch('/api/system-policy', { headers: { 'Authorization': `Bearer ${token}` } })
+                fetch('/api/auth/me', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/bookings', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/services', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/documents', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/invoices', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/messages', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/add-ons', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } }),
+                fetch('/api/system-policy', { cache: 'no-store', headers: { 'Authorization': `Bearer ${token}` } })
             ])
 
             const userData = await userRes.json()

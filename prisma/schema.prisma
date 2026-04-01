@@ -61,6 +61,7 @@ model Contact {
   isBlacklisted        Boolean              @default(false)
   blacklistReason      String?
   internalStaffNotes   String?
+  rateTier             String               @default("STANDARD") // STANDARD or PRIVATE (Req 8)
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   bookings             Booking[]
@@ -90,6 +91,7 @@ model Service {
   expedite3Day          Float
   description           String?
   active                Boolean   @default(true)
+  isTemplate            Boolean   @default(false) // Requirement: Blank/Custom Service Template
 
   // Private Client Rate Tier (Overrides)
   privateMinimumFee     Float?
@@ -164,6 +166,12 @@ model Booking {
   lockedMinimumFee     Float?
   lockedPageRate       Float?
   lockedRealtimeFee    Float?
+  hasRough             Boolean             @default(false)
+  hasRealtime          Boolean             @default(false)
+  hasCart              Boolean             @default(false)
+  hasVideographer      Boolean             @default(false)
+  hasInterpreter       Boolean             @default(false)
+  hasExpert            Boolean             @default(false)
   
   // Reporter-facing contract (Locked Payout Rates)
   lockedReporterPageRate       Float?
@@ -234,6 +242,10 @@ model Invoice {
   cancellationFee  Float?
   preBilledReviewFee Float?
   paperDeliveryFee   Float?
+  readAndSignFee     Float?
+  miniFee            Float?
+  indexFee           Float?
+  extraCertOriginalFee Float?
   minimumFee       Float     @default(400)
   cartFee          Float?
   lateFee          Float?    @default(0)

@@ -52,7 +52,7 @@ async function main() {
             expedite1Day: 1.75,
             expedite2Day: 1.5,
             expedite3Day: 1.25,
-            description: 'Proceedings: Deposition, Arbitration / Mediation, Examination Under Oath.',
+            description: 'Proceedings: Deposition, Arbitration/Hearings, Examination Under Oath.',
             active: true,
         },
         {

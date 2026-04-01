@@ -11,7 +11,10 @@ import {
     Activity,
     Shield,
     DollarSign,
-    Cpu
+    Cpu,
+    Zap,
+    MessageSquare,
+    Copy
 } from 'lucide-react'
 
 export default function ServicesAdmin() {
@@ -20,6 +23,7 @@ export default function ServicesAdmin() {
     const [isEditing, setIsEditing] = useState<string | null>(null)
     const [isAdding, setIsAdding] = useState(false)
     const [saving, setSaving] = useState(false)
+    const [view, setView] = useState<'ACTIVE' | 'TEMPLATES'>('ACTIVE')
     const [formData, setFormData] = useState({
         serviceName: '',
         category: 'COURT_REPORTING',
@@ -35,16 +39,17 @@ export default function ServicesAdmin() {
         expedite3Day: 0,
         description: '',
         active: true,
+        isTemplate: false,
     })
 
     useEffect(() => {
         fetchServices()
-    }, [])
+    }, [view])
 
     const fetchServices = async () => {
         try {
             const token = localStorage.getItem('token')
-            const res = await fetch('/api/services', {
+            const res = await fetch(`/api/services?isTemplate=${view === 'TEMPLATES'}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             })
             const data = await res.json()
@@ -102,19 +107,20 @@ export default function ServicesAdmin() {
     const resetForm = () => {
         setFormData({
             serviceName: '',
-            category: 'COURT_REPORTING',
-        subService: 'DEPOSITION',
+            category: 'COUR_REPORTING',
+            subService: 'DEPOSITION',
             defaultMinimumFee: 400,
             pageRate: 0,
             appearanceFeeRemote: 0,
             appearanceFeeInPerson: 0,
             realtimeFee: 0,
-            expediteImmediate: 0,
-            expedite1Day: 0,
-            expedite2Day: 0,
-            expedite3Day: 0,
+            expediteImmediate: 1.25,
+            expedite1Day: 1.10,
+            expedite2Day: 1.00,
+            expedite3Day: 0.90,
             description: '',
             active: true,
+            isTemplate: view === 'TEMPLATES',
         })
     }
 
@@ -135,20 +141,27 @@ export default function ServicesAdmin() {
                     </h1>
                     <p className="text-muted-foreground font-medium tracking-tight uppercase text-xs mt-2">Configuration matrix for all stenographic service endpoints.</p>
                 </div>
-                <button
-                    onClick={() => { setIsAdding(true); resetForm(); }}
-                    className="luxury-button py-4 flex items-center gap-3 shadow-xl shadow-primary/20"
-                >
-                    <Plus className="h-5 w-5" /> Add Service
-                </button>
+                
+                <div className="flex items-center gap-4">
+                    <div className="flex bg-muted p-1.5 rounded-2xl border border-border">
+                        <button onClick={() => setView('ACTIVE')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${view === 'ACTIVE' ? 'bg-white text-primary shadow-lg shadow-black/5' : 'text-slate-400 hover:text-slate-600'}`}>Standard Catalog</button>
+                        <button onClick={() => setView('TEMPLATES')} className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${view === 'TEMPLATES' ? 'bg-white text-primary shadow-lg shadow-black/5' : 'text-slate-400 hover:text-slate-600'}`}>Reusable Templates</button>
+                    </div>
+                    <button
+                        onClick={() => { setIsAdding(true); resetForm(); }}
+                        className="luxury-button py-4 flex items-center gap-3 shadow-xl shadow-primary/20"
+                    >
+                        <Plus className="h-5 w-5" /> Add {view === 'TEMPLATES' ? 'Template' : 'Service'}
+                    </button>
+                </div>
             </div>
 
             {/* Stats Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <ContentStat label="Total Services" value={services.length} icon={<Cpu />} color="text-primary" />
-                <ContentStat label="Active Now" value={services.filter(s => s.active).length} icon={<Activity />} color="text-emerald-500" />
+                <ContentStat label={`Total ${view === 'TEMPLATES' ? 'Templates' : 'Services'}`} value={services.length} icon={<Cpu />} color="text-primary" />
+                <ContentStat label="System Ready" value={services.filter(s => s.active).length} icon={<Activity />} color="text-emerald-500" />
                 <ContentStat label="Avg Rate" value={`$${(services.reduce((acc, s) => acc + s.pageRate, 0) / (services.length || 1)).toFixed(2)}`} icon={<DollarSign />} color="text-primary" />
-                <ContentStat label="Base Min" value="$400.00" icon={<Shield />} color="text-primary" />
+                <ContentStat label="Mode" value={view} icon={<Shield />} color="text-indigo-500" />
             </div>
 
             {/* Quick Seed Action for User */}
@@ -159,7 +172,7 @@ export default function ServicesAdmin() {
                     </div>
                     <div>
                         <h3 className="text-2xl font-black text-amber-500 uppercase">Operational Void Detected</h3>
-                        <p className="text-muted-foreground max-w-md mx-auto mt-2 uppercase text-[10px] font-bold tracking-widest">No services added yet. Add your first service to enable client bookings.</p>
+                        <p className="text-muted-foreground max-w-md mx-auto mt-2 uppercase text-[10px] font-bold tracking-widest">No {view.toLowerCase()} added yet. Add your first {view === 'TEMPLATES' ? 'template' : 'service'} to begin.</p>
                     </div>
                 </div>
             )}
@@ -168,12 +181,12 @@ export default function ServicesAdmin() {
                 {services.map(service => (
                     <div key={service.id} className="group relative bg-card rounded-[2.5rem] p-8 border border-border hover:shadow-2xl hover:border-primary/20 transition-all duration-500 overflow-hidden">
                         <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:scale-110 transition-transform duration-700">
-                            <Cpu className="h-24 w-24 text-primary" />
+                            {service.isTemplate ? <Copy className="h-24 w-24 text-indigo-500" /> : <Cpu className="h-24 w-24 text-primary" />}
                         </div>
 
                         <div className="flex justify-between items-start mb-6 relative z-10">
-                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${service.active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground grayscale'} border border-border`}>
-                                <Cpu className="h-7 w-7" />
+                            <div className={`h-14 w-14 rounded-2xl flex items-center justify-center ${service.active ? (service.isTemplate ? 'bg-indigo-500/10 text-indigo-500' : 'bg-primary/10 text-primary') : 'bg-muted text-muted-foreground grayscale'} border border-border`}>
+                                {service.isTemplate ? <Copy className="h-7 w-7" /> : <Cpu className="h-7 w-7" />}
                             </div>
                             <div className="flex items-center gap-2">
                                 <button onClick={() => startEdit(service)} className="h-10 w-10 rounded-xl bg-muted border border-border text-muted-foreground hover:text-primary transition-all flex items-center justify-center">
@@ -220,12 +233,12 @@ export default function ServicesAdmin() {
                         </button>
 
                         <h2 className="text-3xl font-black text-foreground uppercase tracking-tighter mb-10">
-                            {isEditing ? 'Edit' : 'Add'} Service
+                            {isEditing ? 'Edit' : 'Add'} {formData.isTemplate ? 'Template' : 'Service'}
                         </h2>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <div className="space-y-4">
-                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-2">Service Name</label>
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-2">Service Identity</label>
                                 <input
                                     className="w-full bg-muted/50 border border-border rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-bold uppercase tracking-widest placeholder:text-muted-foreground/30"
                                     value={formData.serviceName}
@@ -251,7 +264,22 @@ export default function ServicesAdmin() {
                             <Field label="Real-time Stream Sync ($)" value={formData.realtimeFee} onChange={(v: any) => setFormData({ ...formData, realtimeFee: parseFloat(v) })} />
 
                             <div className="md:col-span-2 space-y-4">
-                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-2">Description & Details</label>
+                                <label className="flex items-center gap-4 p-6 rounded-2xl border border-border bg-muted/20 cursor-pointer hover:bg-muted/40 transition-all">
+                                    <input 
+                                        type="checkbox" 
+                                        className="h-6 w-6 accent-indigo-600 rounded-lg" 
+                                        checked={formData.isTemplate} 
+                                        onChange={e => setFormData({ ...formData, isTemplate: e.target.checked })} 
+                                    />
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-foreground">Save as Reusable Template</p>
+                                        <p className="text-[8px] font-bold uppercase text-muted-foreground tracking-widest italic mt-0.5">Templates are hidden from standard booking flows and reserved for administrative protocols.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="md:col-span-2 space-y-4">
+                                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-2">Description & Structural Details</label>
                                 <textarea
                                     className="w-full bg-muted/50 border border-border rounded-2xl px-6 py-6 min-h-[120px] outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-bold uppercase tracking-widest placeholder:text-muted-foreground/30 resize-none"
                                     value={formData.description}
@@ -274,7 +302,7 @@ export default function ServicesAdmin() {
                                 className="luxury-button px-12 py-5 shadow-2xl shadow-primary/30 flex items-center gap-3 disabled:opacity-50"
                             >
                                 {saving ? <Cpu className="h-4 w-4 animate-spin" /> : null}
-                                {saving ? 'Processing...' : (isEditing ? 'Save Changes' : 'Add Service')}
+                                {saving ? 'Processing...' : (isEditing ? 'Save Changes' : (formData.isTemplate ? 'Create Template' : 'Add Service'))}
                             </button>
                         </div>
                     </div>
@@ -290,6 +318,7 @@ function Field({ label, value, onChange }: any) {
             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] ml-2">{label}</label>
             <input
                 type="number"
+                step="0.01"
                 className="w-full bg-muted/50 border border-border rounded-2xl px-6 py-4 outline-none focus:ring-4 focus:ring-primary/10 transition-all text-sm font-bold uppercase tracking-widest"
                 value={value}
                 onChange={e => onChange(e.target.value)}

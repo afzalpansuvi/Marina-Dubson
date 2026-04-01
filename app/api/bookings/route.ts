@@ -21,6 +21,12 @@ const bookingSchema = z.object({
     appearanceType: z.enum(['REMOTE', 'IN_PERSON']),
     turnaroundTime: z.string().optional(),
     specialRequirements: z.string().optional(),
+    hasRough: z.boolean().optional(),
+    hasRealtime: z.boolean().optional(),
+    hasCart: z.boolean().optional(),
+    hasVideographer: z.boolean().optional(),
+    hasInterpreter: z.boolean().optional(),
+    hasExpert: z.boolean().optional(),
 })
 
 // GET all bookings
@@ -225,6 +231,12 @@ export async function POST(request: NextRequest) {
                 appearanceType: data.appearanceType,
                 turnaroundTime: data.turnaroundTime,
                 specialRequirements: data.specialRequirements,
+                hasRough: data.hasRough || false,
+                hasRealtime: data.hasRealtime || false,
+                hasCart: data.hasCart || false,
+                hasVideographer: data.hasVideographer || false,
+                hasInterpreter: data.hasInterpreter || false,
+                hasExpert: data.hasExpert || false,
                 bookingStatus: 'SUBMITTED',
                 cancellationDeadline,
                 lockedPageRate: rates.pageRate,
@@ -240,16 +252,17 @@ export async function POST(request: NextRequest) {
             },
         })
 
+        const b = booking as any
         try {
             await integrationOrchestrator.syncToZohoCRM({
-                bookingId: booking.id,
-                contactEmail: booking.contact.email,
-                contactFirstName: booking.contact.firstName,
-                contactLastName: booking.contact.lastName,
-                contactPhone: booking.contact.phone || undefined,
-                companyName: booking.contact.companyName || undefined,
-                serviceName: booking.service.serviceName,
-                serviceAmount: booking.lockedAppearanceFee || rates.minimumFee,
+                bookingId: b.id,
+                contactEmail: b.contact.email,
+                contactFirstName: b.contact.firstName,
+                contactLastName: b.contact.lastName,
+                contactPhone: b.contact.phone || undefined,
+                companyName: b.contact.companyName || undefined,
+                serviceName: b.service.serviceName,
+                serviceAmount: b.lockedAppearanceFee || rates.minimumFee,
                 bookingDate: format(bookingDate, 'yyyy-MM-dd'),
                 bookingNumber: booking.bookingNumber,
                 proceedingType: booking.proceedingType,
@@ -260,11 +273,11 @@ export async function POST(request: NextRequest) {
 
         const emailTemplate = emailTemplates.bookingPending(
             bookingNumber,
-            `${booking.contact.firstName} ${booking.contact.lastName}`
+            `${b.contact.firstName} ${b.contact.lastName}`
         )
 
         await sendEmail({
-            to: booking.contact.email,
+            to: b.contact.email,
             subject: emailTemplate.subject,
             html: emailTemplate.html,
         })

@@ -9,6 +9,12 @@ const updateSchema = z.object({
     reporterId: z.string().optional(),
     bookingStatus: z.string().optional(),
     isMarketplace: z.boolean().optional(),
+    serviceId: z.string().optional(),
+    proceedingType: z.string().optional(),
+    lockedAppearanceFee: z.number().optional(),
+    lockedPageRate: z.number().optional(),
+    lockedMinimumFee: z.number().optional(),
+    lockedRealtimeFee: z.number().optional(),
 })
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -65,14 +71,25 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
         }
 
+        const updateData: any = {
+            specialRequirements: data.specialRequirements ?? booking.specialRequirements,
+        }
+
+        if (isAdmin) {
+            updateData.reporterId = data.reporterId ?? booking.reporterId
+            updateData.bookingStatus = data.bookingStatus ?? booking.bookingStatus
+            updateData.isMarketplace = data.isMarketplace ?? booking.isMarketplace
+            updateData.serviceId = data.serviceId ?? booking.serviceId
+            updateData.proceedingType = data.proceedingType ?? booking.proceedingType
+            updateData.lockedAppearanceFee = data.lockedAppearanceFee ?? booking.lockedAppearanceFee
+            updateData.lockedPageRate = data.lockedPageRate ?? booking.lockedPageRate
+            updateData.lockedMinimumFee = data.lockedMinimumFee ?? booking.lockedMinimumFee
+            updateData.lockedRealtimeFee = data.lockedRealtimeFee ?? booking.lockedRealtimeFee
+        }
+
         const updated = await prisma.booking.update({
             where: { id: bookingId },
-            data: {
-                specialRequirements: data.specialRequirements ?? booking.specialRequirements,
-                reporterId: data.reporterId ?? booking.reporterId,
-                bookingStatus: data.bookingStatus ?? booking.bookingStatus,
-                isMarketplace: data.isMarketplace ?? booking.isMarketplace,
-            },
+            data: updateData,
             include: { reporter: true, service: true, invoice: true }
         })
 

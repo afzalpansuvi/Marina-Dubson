@@ -201,7 +201,7 @@ export function LandingServices() {
         {
             serviceName: 'Premium Court Reporting',
             category: 'COURT_REPORTING',
-            description: 'Proceeding coverage: Deposition, Arbitration/Hearings, Examination Under Oath with realtime + exhibit support.'
+            description: 'Proceeding coverage: Deposition, Arbitration/Hearings, Hearing, Examinations Under Oath, CART, Other with realtime + exhibit support.'
         },
         {
             serviceName: 'CART Services',

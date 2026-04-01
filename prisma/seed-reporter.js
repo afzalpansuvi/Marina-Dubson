@@ -66,7 +66,7 @@ async function main() {
                 contactId: client.id,
                 serviceId: service.id,
                 userId: adminId,
-                proceedingType: i === 1 ? 'Deposition' : i === 2 ? 'Arbitration' : 'Hearing',
+                proceedingType: i === 1 ? 'Deposition' : i === 2 ? 'Arbitration/Hearings' : 'Hearing',
                 bookingDate: new Date(Date.now() + (i * 86400000)),
                 bookingTime: '09:00 AM',
                 location: i === 1 ? 'Zoom' : '123 Legal Way, NY',

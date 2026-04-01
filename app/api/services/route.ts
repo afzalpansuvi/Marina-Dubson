@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
 import prisma from '@/lib/prisma'
 import { extractTokenFromHeader, verifyToken } from '@/lib/auth'
 import { z } from 'zod'
@@ -18,16 +19,17 @@ const serviceSchema = z.object({
     expedite3Day: z.number(),
     description: z.string().optional(),
     active: z.boolean().default(true),
+    isTemplate: z.boolean().default(false),
 })
 
 // Requirement 7 order
 const confirmedOrder = [
-    'Deposition',
-    'Arbitration/Hearings',
-    'Hearing',
-    'Examinations Under Oath',
+    'DEPOSITION',
+    'ARBITRATION_HEARINGS',
+    'HEARING',
+    'EUO',
     'CART',
-    'Other'
+    'OTHER'
 ]
 
 const standardServices = [
@@ -87,7 +89,7 @@ const standardServices = [
     {
         serviceName: 'Examinations Under Oath',
         category: 'COURT_REPORTING' as any,
-        subService: 'EXAMINATION' as any,
+        subService: 'EUO' as any,
         defaultMinimumFee: 400,
         pageRate: 5.5,
         appearanceFeeRemote: 100,
@@ -146,12 +148,18 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url)
         const category = searchParams.get('category')
         const active = searchParams.get('active')
+        const isTemplate = searchParams.get('isTemplate')
 
         const where: any = {}
         if (category) where.category = category
         if (active !== null) where.active = active === 'true'
+        if (isTemplate !== null) where.isTemplate = isTemplate === 'true'
+        else where.isTemplate = false // Default to excluding templates from the main list unless requested
 
-        await syncStandardServices()
+        const serviceCount = await prisma.service.count()
+        if (serviceCount === 0) {
+            await syncStandardServices()
+        }
 
         let services = await prisma.service.findMany({
             where,
@@ -160,8 +168,8 @@ export async function GET(request: NextRequest) {
 
         // Apply mandatory sorting per Requirement 7
         services.sort((a, b) => {
-            const indexA = confirmedOrder.indexOf(a.serviceName)
-            const indexB = confirmedOrder.indexOf(b.serviceName)
+            const indexA = confirmedOrder.indexOf(a.subService)
+            const indexB = confirmedOrder.indexOf(b.subService)
             if (indexA === -1 && indexB === -1) return a.serviceName.localeCompare(b.serviceName)
             if (indexA === -1) return 1
             if (indexB === -1) return -1

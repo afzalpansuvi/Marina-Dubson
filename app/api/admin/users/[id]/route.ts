@@ -70,6 +70,7 @@ export async function PATCH(
                     blacklistReason: body.contact.blacklistReason,
                     internalStaffNotes: body.contact.internalStaffNotes,
                     customPricingEnabled: body.contact.customPricingEnabled,
+                    rateTier: body.contact.rateTier,
                     pricingNotes: body.contact.pricingNotes
                 }
             }

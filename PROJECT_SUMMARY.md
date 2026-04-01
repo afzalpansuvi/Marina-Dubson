@@ -200,7 +200,7 @@ The following pages need to be created:
 - [ ] Rate sheet PDF generation
 - [ ] Mailchimp integration
 
-## 📱 Mobile & Desktop Deployment
+## 📱 Mobile & Desktop Launch
 
 ### Progressive Web App (PWA)
 The app is already configured as a PWA. Users can install it:

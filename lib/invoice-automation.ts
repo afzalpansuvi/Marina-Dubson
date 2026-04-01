@@ -1,5 +1,6 @@
 import prisma from './prisma'
 import { sendEmail, emailTemplates } from './email'
+import { PricingEngine } from './pricing-engine'
 
 export async function generateInvoiceForBooking(bookingId: string) {
     // 1. Get Booking details
@@ -23,43 +24,24 @@ export async function generateInvoiceForBooking(bookingId: string) {
     })
     if (existingInvoice) return existingInvoice
 
-    // 3. Determine Pricing (Priority: Custom Contact Pricing > Default Service Pricing)
-    let pricing = {
-        pageRate: booking.service.pageRate,
-        appearanceFee: booking.appearanceType === 'REMOTE'
-            ? booking.service.appearanceFeeRemote
-            : booking.service.appearanceFeeInPerson,
-        realtimeFee: booking.service.realtimeFee,
-        minimumFee: booking.service.defaultMinimumFee,
-    }
+    // 3. Determine Pricing using Pricing Engine (MD Global Standards)
+    const rates = await PricingEngine.getApplicableRates(
+        booking.contactId, 
+        booking.serviceId, 
+        (booking.contact as any).rateTier || 'STANDARD'
+    )
 
-    // Apply custom pricing if enabled
-    if (booking.contact.customPricingEnabled && booking.contact.customPricing.length > 0) {
-        const custom = booking.contact.customPricing[0]
-        pricing = {
-            pageRate: custom.pageRate ?? pricing.pageRate,
-            appearanceFee: booking.appearanceType === 'REMOTE'
-                ? (custom.appearanceFeeRemote ?? pricing.appearanceFee)
-                : (custom.appearanceFeeInPerson ?? pricing.appearanceFee),
-            realtimeFee: custom.realtimeFee ?? pricing.realtimeFee,
-            minimumFee: custom.minimumFee ?? pricing.minimumFee,
-        }
-    }
+    // 4. Calculate Amounts using Pricing Engine
+    const { subtotal, total } = PricingEngine.calculateTotal(rates, {
+        pages: 0, // DRAFT status usually means pages are unknown yet
+        originalCopies: 1,
+        additionalCopies: 0,
+        isRemote: (booking as any).lockedAppearanceFee ? ((booking as any).lockedAppearanceFee < 150) : (booking.appearanceType === 'REMOTE'),
+    })
 
-    // 4. Calculate Amounts
-    // For automation, we assume standard defaults if not specified. 
-    // Usually pages are entered by the reporter when completing the job.
-    // If we don't have pages yet, we'll mark as DRAFT.
-    const pages = 0 // Will be updated by reporter/admin later
+    const pages = 0
     const originalCopies = 1
     const additionalCopies = 0
-    const copyRate = 1.00
-    const congestionFee = 9.00
-
-    const subtotal = (pages * pricing.pageRate) + pricing.appearanceFee + congestionFee
-
-    // MANDATORY MINIMUM FEE Enforcement ($400 by default)
-    const total = Math.max(subtotal, pricing.minimumFee)
 
     // 5. Generate Invoice Number
     const count = await prisma.invoice.count()
@@ -75,14 +57,15 @@ export async function generateInvoiceForBooking(bookingId: string) {
             pages,
             originalCopies,
             additionalCopies,
-            pageRate: pricing.pageRate,
-            copyRate,
-            appearanceFee: pricing.appearanceFee,
-            congestionFee,
-            minimumFee: pricing.minimumFee,
+            pageRate: rates.pageRate,
+            copyRate: rates.copyRate,
+            appearanceFee: (booking as any).lockedAppearanceFee ?? (booking.appearanceType === 'REMOTE' ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson),
+            congestionFee: (booking.contact as any).rateTier === 'PRIVATE' ? 0 : rates.congestionFee,
+            minimumFee: rates.minimumFee,
             subtotal,
             total,
             status: 'DRAFT',
+            rateTier: (booking.contact as any).rateTier || 'STANDARD',
         },
         include: {
             contact: true,
