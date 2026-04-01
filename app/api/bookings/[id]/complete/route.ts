@@ -37,19 +37,11 @@ export async function POST(
             return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
         }
 
-        // If agency, skip invoice generation (direct deposit handling)
-        if (booking.contact?.clientType?.toUpperCase() === 'AGENCY') {
-            // Still mark the booking as completed
-            await prisma.booking.update({
-                where: { id },
-                data: { bookingStatus: 'COMPLETED' }
-            })
-            return NextResponse.json({
-                success: true,
-                message: 'Agency booking completed. Direct deposit handled outside invoicing.',
-                invoiceId: null
-            })
-        }
+        // Finalize the booking record
+        await prisma.booking.update({
+            where: { id },
+            data: { bookingStatus: 'COMPLETED' }
+        })
 
         // Trigger the Final Automation Flow (draft by default)
         const result = await integrationOrchestrator.generateFinalInvoice(id, billingData, { sendNow: false })

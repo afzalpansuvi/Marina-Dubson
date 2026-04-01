@@ -65,7 +65,7 @@ export class PricingEngine {
             afterHoursRate: 125,
             waitTimeRate: 100,
             cartRate: 2.00,
-            minimumFee: service.defaultMinimumFee || 400.00, // $400 standard cover charge floor
+            minimumFee: service.defaultMinimumFee || 500.00, // $500 standard cover charge floor
             expediteImmediate: service.expediteImmediate || 1.30,
             expedite1Day: service.expedite1Day || 1.15,
             expedite2Day: service.expedite2Day || 1.00,
@@ -85,7 +85,7 @@ export class PricingEngine {
             rates.appearanceFeeInPerson = 200.00;
             rates.appearanceFeeRemote = 100.00;
             rates.copyRate = 2.875; // 0+2 copies = 5.75
-            rates.minimumFee = 400.00;
+            rates.minimumFee = 750.00;
             rates.roughRate = 1.75;
             rates.realtimeFee = 2.00;
             rates.afterHoursRate = 100.00;
@@ -192,13 +192,12 @@ export class PricingEngine {
         hasMini?: boolean,
         hasIndex?: boolean,
         locationBaseFee?: number
-    }): { subtotal: number, total: number } {
+    }): { subtotal: number, total: number, expediteFee: number, expediteLabel: string } {
         const isPrivate = rates.rateTier === 'PRIVATE'
         
-        // Task 4: FIXED expedite formula — multiply rate by scale directly (not additive)
-        // Formula: Expedite Charge = (Original rate) × (%)
         const expeditePercentage = data.turnaroundDays !== undefined ? this.getExpeditePercentage(data.turnaroundDays) : 0.20
-        const effectivePageRate = rates.pageRate * (1 + expeditePercentage)
+        const expediteFee = (data.pages * rates.pageRate * expeditePercentage)
+        const expediteLabel = data.turnaroundDays !== undefined ? `${data.turnaroundDays} Day Expedite (${(expeditePercentage * 100).toFixed(0)}%)` : ''
 
         // BASE CHARGES: Appearance, Congestion, Pages, Copies
         let appearanceFee = (data.isRemote ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson)
@@ -209,7 +208,7 @@ export class PricingEngine {
         }
 
         let baseSubtotal = 0
-        baseSubtotal += (data.pages * effectivePageRate * data.originalCopies)
+        baseSubtotal += (data.pages * rates.pageRate * data.originalCopies)
         baseSubtotal += (data.pages * rates.copyRate * data.additionalCopies)
         
         // Extra Certified Original (75% of Base Original Rate)
@@ -221,7 +220,7 @@ export class PricingEngine {
         baseSubtotal += isPrivate ? 0 : rates.congestionFee
 
         // Base Coverage ($400 Bust/Min)
-        let minFee = isPrivate ? Math.max(rates.minimumFee, 400) : rates.minimumFee
+        let minFee = isPrivate ? Math.max(rates.minimumFee, 750) : rates.minimumFee
         if (isPrivate && data.isOnRecordBust) {
             minFee = Math.max(minFee, 500) // Statement on record / Bust: $500 private minimum
         }
@@ -282,10 +281,10 @@ export class PricingEngine {
             extrasTotal += (data.pages * 1.00) // $1.00 per page standard review fee
         }
 
-        const total = baseTotal + extrasTotal
-        const subtotal = baseSubtotal + extrasTotal
+        const total = baseTotal + extrasTotal + expediteFee
+        const subtotal = baseSubtotal + extrasTotal + expediteFee
 
-        return { subtotal, total }
+        return { subtotal, total, expediteFee, expediteLabel }
     }
 
     static calculateEstimate(rates: BookingRates): number {

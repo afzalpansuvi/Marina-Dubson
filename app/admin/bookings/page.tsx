@@ -68,6 +68,7 @@ export default function BookingManagementPage() {
     const [showAddonModal, setShowAddonModal] = useState(false)
     const [addonText, setAddonText] = useState('')
     const [addonSaving, setAddonSaving] = useState(false)
+    const [isCompletingInvoice, setIsCompletingInvoice] = useState(false)
 
     const fetchBookings = async () => {
         try {
@@ -183,7 +184,6 @@ export default function BookingManagementPage() {
         try {
             const booking = bookings.find(b => b.id === id)
             if (booking?.isOpened) return
-            setIsPending(true)
             const token = localStorage.getItem('token')
             await fetch(`/api/bookings/${id}`, {
                 method: 'PATCH',
@@ -196,8 +196,6 @@ export default function BookingManagementPage() {
             fetchBookings()
         } catch (error) {
             console.error('Failed to mark as opened:', error)
-        } finally {
-            setIsPending(false)
         }
     }
 
@@ -328,11 +326,13 @@ export default function BookingManagementPage() {
     }
 
     const handleComplete = async () => {
+        if (isCompletingInvoice) return
         const bookingId = invoiceTargetId ?? selectedBookingId
         if (!bookingId) {
             setError('Select a booking before generating an invoice.')
             return
         }
+        setIsCompletingInvoice(true)
         setIsPending(true)
         try {
             setError(null)
@@ -357,6 +357,7 @@ export default function BookingManagementPage() {
             console.error('Job completion error:', error)
             setError(error.message || 'Something went wrong. Please try again.')
         } finally {
+            setIsCompletingInvoice(false)
             setIsPending(false)
         }
     }
@@ -374,7 +375,8 @@ export default function BookingManagementPage() {
             5: 0.70, 6: 0.60, 7: 0.50, 8: 0.40, 9: 0.30, 10: 0.20
         } as Record<number, number>)[days] ?? 0.20
         const expeditePercentage = getExpPercentage(billingData.turnaroundDays)
-        const effectivePageRate = rawBaseRate * (1 + expeditePercentage)
+        const expediteFee = billingData.pages * rawBaseRate * expeditePercentage
+        const effectivePageRate = rawBaseRate // Use base rate for line item display, expedite is separate extra now
 
         const rates = {
             pageRate: effectivePageRate,
@@ -490,10 +492,16 @@ export default function BookingManagementPage() {
             currentExtras += reviewFee
         }
 
-        return { subtotal: currentBase + currentExtras, total: baseTotal + currentExtras, breakdown }
+        if (expediteFee > 0) {
+            breakdown.push({ label: 'Expedite Surcharge', value: expediteFee, detail: `${billingData.turnaroundDays} Day window @ ${(expeditePercentage * 100).toFixed(0)}%` })
+        }
+
+        return { subtotal: currentBase + currentExtras + expediteFee, total: baseTotal + currentExtras + expediteFee, breakdown }
     }
 
     const calculation = getDraftCalculation()
+    const completeButtonLabel = isCompletingInvoice ? 'Generating Invoice...' : 'Generate Invoice'
+    const completeButtonClasses = `flex-[2] py-4 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all ${isCompletingInvoice ? 'bg-foreground/70 text-background/60 cursor-not-allowed' : 'bg-foreground text-background hover:scale-105' }`
 
     const fetchReporters = async () => {
         try {
@@ -527,6 +535,32 @@ export default function BookingManagementPage() {
             }
         } catch (error) {
             console.error('Failed to assign reporter:', error)
+        } finally {
+            setIsPending(false)
+        }
+    }
+
+    const handleUnassignReporter = async (id: string) => {
+        setIsPending(true)
+        try {
+            const token = localStorage.getItem('token')
+            const res = await fetch(`/api/bookings/${id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ 
+                    reporterId: null, 
+                    bookingStatus: 'ACCEPTED', 
+                    isMarketplace: false 
+                }),
+            })
+            if (res.ok) {
+                fetchBookings()
+            }
+        } catch (error) {
+            console.error('Failed to unassign reporter:', error)
         } finally {
             setIsPending(false)
         }
@@ -694,31 +728,35 @@ export default function BookingManagementPage() {
                             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
                                 <div className="flex items-center gap-3 p-2 rounded-2xl bg-muted/50 border border-border/50 overflow-x-auto no-scrollbar">
                                     {b.reporter ? (
-                                        <button onClick={() => { setAssigningBookingId(b.id); setShowAssignModal(true) }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground min-w-max shadow-lg shadow-primary/20">
-                                            <User className="h-3 w-3" />
-                                            <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{b.reporter.firstName} {b.reporter.lastName}</span>
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button onClick={(e) => { e.stopPropagation(); setAssigningBookingId(b.id); setShowAssignModal(true) }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground min-w-max shadow-lg shadow-primary/20 hover:scale-105 transition-all">
+                                                <User className="h-3 w-3" />
+                                                <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{b.reporter.firstName} {b.reporter.lastName}</span>
+                                            </button>
+                                            <button onClick={(e) => { e.stopPropagation(); handleUnassignReporter(b.id) }} className="px-3 py-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-[8px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all">Unassign</button>
+                                        </div>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <button onClick={() => { setAssigningBookingId(b.id); setShowAssignModal(true) }} className="px-3 py-2 rounded-xl bg-indigo-500 text-white text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/10">Assign</button>
-                                            <button onClick={() => toggleMarketplace(b.id, b.isMarketplace)} className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border tracking-widest ${b.isMarketplace ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>{b.isMarketplace ? 'Unpublish' : 'Publish'}</button>
+                                            <button onClick={(e) => { e.stopPropagation(); setAssigningBookingId(b.id); setShowAssignModal(true) }} className="px-3 py-2 rounded-xl bg-indigo-500 text-white text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/10 hover:scale-105 transition-all">Assign</button>
+                                            <button onClick={(e) => { e.stopPropagation(); toggleMarketplace(b.id, b.isMarketplace) }} className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border tracking-widest transition-all ${b.isMarketplace ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>{b.isMarketplace ? 'Unpublish' : 'Publish'}</button>
                                         </div>
                                     )}
                                     <div className="flex items-center gap-2">
                                         {b.bookingStatus === 'SUBMITTED' && (
-                                            <button onClick={() => openReviewModal(b)} className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] font-black uppercase tracking-widest">Approve</button>
+                                            <button onClick={(e) => { e.stopPropagation(); openReviewModal(b) }} className="px-3 py-2 rounded-xl bg-primary text-primary-foreground text-[8px] font-black uppercase tracking-widest hover:scale-105 transition-all">Approve</button>
                                         )}
                                         {!['COMPLETED', 'CANCELLED', 'DECLINED'].includes(b.bookingStatus) && (
-                                        <button onClick={() => { 
+                                        <button onClick={(e) => { 
+                                            e.stopPropagation();
                                             setSelectedBookingId(b.id); 
                                             setInvoiceTargetId(b.id)
                                             setCompletedInvoiceId(null); 
                                             setShowCompleteModal(true);
                                             fetchPricingTemplate(b.id, b.contact?.rateTier || 'STANDARD');
-                                        }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest">Complete & Bill</button>
+                                        }} className="px-4 py-2 rounded-xl bg-foreground text-background text-[8px] font-black uppercase tracking-widest hover:scale-105 transition-all">Complete & Bill</button>
                                         )}
                                         {b.bookingStatus === 'COMPLETED' && b.invoice?.id && (
-                                            <Link href={`/admin/invoices/${b.invoice.id}`} className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-500/20">
+                                            <Link href={`/admin/invoices/${b.invoice.id}`} onClick={(e) => e.stopPropagation()} className="px-4 py-2 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-500/20 hover:scale-105 transition-all">
                                                <DollarSign className="h-3 w-3" /> View Invoice
                                             </Link>
                                         )}
@@ -878,7 +916,14 @@ export default function BookingManagementPage() {
                                 {completedInvoiceId ? (
                                     <Link href={`/admin/invoices/${completedInvoiceId}`} className="flex-[2] py-4 rounded-2xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest text-center shadow-xl">View Final Invoice</Link>
                                 ) : (
-                                    <button onClick={handleComplete} className="flex-[2] py-4 rounded-2xl bg-foreground text-background text-[10px] font-black uppercase tracking-widest shadow-xl">Generate Invoice</button>
+                                    <button
+                                        onClick={handleComplete}
+                                        disabled={isCompletingInvoice}
+                                        aria-busy={isCompletingInvoice}
+                                        className={`${completeButtonClasses} text-[10px]`}
+                                    >
+                                        {completeButtonLabel}
+                                    </button>
                                 )}
                             </div>
                         </div>

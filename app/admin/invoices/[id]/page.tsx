@@ -28,6 +28,7 @@ export default function InvoiceDetailPage() {
                     const data = await res.json()
                     setInvoice(data)
                     setEditData(data)
+                    setPayUrl(data.paymentLink || null)
                 }
             } catch (e) {
                 console.error(e)
@@ -56,6 +57,33 @@ export default function InvoiceDetailPage() {
             setGenerating(false)
         }
     }
+
+    const handleMarkAsPaid = async () => {
+        if (!confirm('This will mark the invoice as PAID (Direct Settlement). Continue?')) return
+        setSaving(true)
+        try {
+            const token = localStorage.getItem('token')
+            const res = await fetch(`/api/invoices/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ status: 'PAID', paymentMethod: 'DIRECT_DEPOSIT', paidAt: new Date() })
+            })
+            if (res.ok) {
+                const data = await res.json()
+                setInvoice(data)
+            }
+        } catch (e) {
+            console.error(e)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const paymentButtonLabel = generating ? '...' : payUrl ? 'Linked' : 'Payment Link'
+    const paymentButtonDisabled = generating || !!payUrl
+    const paymentButtonClasses = payUrl
+        ? 'flex-1 sm:flex-none luxury-button flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 h-auto text-[8px] sm:text-[9px] font-black uppercase tracking-widest whitespace-nowrap bg-emerald-500 text-white shadow-xl shadow-emerald-500/40 active:scale-95 transition-all shrink-0'
+        : 'flex-1 sm:flex-none luxury-button flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 h-auto text-[8px] sm:text-[9px] font-black uppercase tracking-widest whitespace-nowrap bg-primary text-primary-foreground shadow-xl active:scale-95 transition-all shrink-0'
 
     const handlePrint = () => {
         window.print()
@@ -206,11 +234,20 @@ export default function InvoiceDetailPage() {
                         {invoice.status !== 'PAID' && (
                             <button
                                 onClick={handleGeneratePaymentLink}
-                                disabled={generating}
-                                className="flex-1 sm:flex-none luxury-button flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 h-auto text-[8px] sm:text-[9px] font-black uppercase tracking-widest whitespace-nowrap bg-primary text-primary-foreground shadow-xl active:scale-95 transition-all shrink-0"
+                                disabled={paymentButtonDisabled}
+                                className={paymentButtonClasses}
                             >
                                 <Zap className="h-3.5 w-3.5" />
-                                {generating ? '...' : 'Payment Link'}
+                                {paymentButtonLabel}
+                            </button>
+                        )}
+                        {invoice.status !== 'PAID' && invoice.contact?.clientType === 'AGENCY' && (
+                             <button
+                                onClick={handleMarkAsPaid}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-[8px] sm:text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0"
+                            >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Mark Paid (Direct)
                             </button>
                         )}
                         <button onClick={handlePrint} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-border bg-card text-muted-foreground hover:text-primary hover:border-primary/40 text-[8px] sm:text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0">
@@ -297,10 +334,8 @@ export default function InvoiceDetailPage() {
 
             {/* Tactical Invoice Container */}
             <div ref={printRef} className="max-w-4xl mx-auto my-4 sm:my-8 px-4 sm:px-4 print:p-0 print:m-0 print:w-full">
-                <div className="glass-panel text-foreground rounded-[1.5rem] sm:rounded-[3rem] border border-border shadow-2xl print:border-0 print:shadow-none print:rounded-none overflow-hidden relative">
-                    <div className="absolute top-0 right-0 p-12 opacity-[0.03] animate-pulse pointer-events-none">
-                        <Activity className="h-48 w-48 text-primary" />
-                    </div>
+                <div className="glass-panel text-foreground rounded-[2rem] sm:rounded-[4rem] border border-border/60 shadow-3xl print:border-0 print:shadow-none print:rounded-none overflow-hidden relative">
+
 
                     <div className="p-5 sm:p-12 space-y-8 sm:space-y-12 relative z-10">
                         {/* Firm Branding */}
@@ -396,20 +431,20 @@ export default function InvoiceDetailPage() {
                                     lineItems.map((item, i) => (
                                         <div key={i} className="grid grid-cols-1 sm:grid-cols-12 px-6 py-5 sm:py-4 rounded-2xl border border-border bg-card hover:bg-muted/30 transition-all group/item">
                                             <div className="col-span-1 sm:col-span-6 space-y-1 mb-4 sm:mb-0">
-                                                <p className="text-xs font-black text-foreground uppercase tracking-tight group-hover/item:text-primary transition-colors">{item.label}</p>
-                                                <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest">{item.detail}</p>
+                                                <p className="text-sm font-black text-foreground uppercase tracking-tight group-hover/item:text-primary transition-colors">{item.label}</p>
+                                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{item.detail}</p>
                                             </div>
-                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2">
-                                                <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Pages:</span>
-                                                <p className="text-[10px] font-black text-foreground text-center uppercase">{pages > 0 ? pages : '—'}</p>
+                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 text-center">
+                                                <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Qty:</span>
+                                                <p className="text-xs font-black text-foreground uppercase">{pages > 0 ? pages : '—'}</p>
                                             </div>
-                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 mt-2 sm:mt-0">
+                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 text-center mt-2 sm:mt-0">
                                                 <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Rate:</span>
-                                                <p className="text-[10px] font-black text-foreground text-center">—</p>
+                                                <p className="text-xs font-black text-foreground uppercase">—</p>
                                             </div>
-                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t border-border sm:border-0">
+                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t border-border sm:border-0 text-right">
                                                 <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Yield:</span>
-                                                <p className="text-xs sm:text-sm font-black text-foreground text-right tracking-tighter">${item.amount.toFixed(2)}</p>
+                                                <p className="text-sm sm:text-lg font-black text-foreground tracking-tighter">${item.amount.toFixed(2)}</p>
                                             </div>
                                         </div>
                                     ))

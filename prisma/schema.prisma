@@ -246,6 +246,8 @@ model Invoice {
   miniFee            Float?
   indexFee           Float?
   extraCertOriginalFee Float?
+  expediteFee        Float?
+  expediteLabel      String?
   minimumFee       Float     @default(400)
   cartFee          Float?
   lateFee          Float?    @default(0)

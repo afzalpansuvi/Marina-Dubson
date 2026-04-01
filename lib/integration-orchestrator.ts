@@ -199,9 +199,9 @@ export class IntegrationOrchestrator {
                 cartRate: (billingData as any).overrides?.cartRate ?? baseRates.cartRate,
             } as any;
 
-            const { subtotal, total } = PricingEngine.calculateTotal(rates, {
+            const { subtotal, total, expediteFee, expediteLabel } = PricingEngine.calculateTotal(rates, {
                 ...billingData,
-                isRemote: booking.appearanceType === 'REMOTE'
+                isRemote: (booking.location || '').toLowerCase().includes('remote')
             })
 
             const invoiceData: any = {
@@ -236,6 +236,8 @@ export class IntegrationOrchestrator {
                 paperDeliveryFee: billingData.hasPaperDelivery ? 150 : 0,
                 preBilledReviewFee: billingData.hasPreBilledReview ? (billingData.pages * 1.00) : 0,
                 cartFee: billingData.hasCart ? (billingData.pages * rates.cartRate) : 0,
+                expediteFee,
+                expediteLabel,
                 subtotal,
                 minimumFee: rates.minimumFee,
                 total,

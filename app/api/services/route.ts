@@ -176,9 +176,9 @@ export async function GET(request: NextRequest) {
             return indexA - indexB
         })
 
-        // Redact pricing for non-admin/staff
+        // Redact pricing for non-admin/staff/client
         let resultServices = services as any[]
-        if (!payload || (payload.role !== 'ADMIN' && payload.role !== 'STAFF')) {
+        if (!payload || (payload.role !== 'ADMIN' && payload.role !== 'STAFF' && payload.role !== 'CLIENT')) {
             resultServices = services.map((s: any) => ({
                 id: s.id,
                 serviceName: s.serviceName,
