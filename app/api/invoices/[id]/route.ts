@@ -1,8 +1,8 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { z } from 'zod'
 import { verifyToken, extractTokenFromHeader } from '@/lib/auth'
-
 const updateSchema = z.object({
     pages: z.number().optional(),
     originalCopies: z.number().optional(),

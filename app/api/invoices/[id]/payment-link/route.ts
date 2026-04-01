@@ -3,6 +3,7 @@
  * Generates a per-invoice Stripe Checkout session and stores the link
  */
 
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import Stripe from 'stripe'

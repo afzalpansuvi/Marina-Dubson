@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { integrationOrchestrator } from '@/lib/integration-orchestrator'
 import prisma from '@/lib/prisma'

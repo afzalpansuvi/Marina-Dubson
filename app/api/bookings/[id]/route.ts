@@ -1,9 +1,9 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { extractTokenFromHeader, verifyToken } from '@/lib/auth'
 import { sendEmail } from '@/lib/email'
 import { z } from 'zod'
-
 const updateSchema = z.object({
     specialRequirements: z.string().optional(),
     reporterId: z.string().optional(),

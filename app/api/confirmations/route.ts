@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 /**
  * Client Confirmation API
  * Handles legal confirmation of booking terms

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic'
 /**
  * Booking Cancellation API
  * Handles booking cancellations with automatic fee enforcement

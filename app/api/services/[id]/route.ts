@@ -1,8 +1,8 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { extractTokenFromHeader, verifyToken } from '@/lib/auth'
 import { z } from 'zod'
-
 const serviceSchema = z.object({
     serviceName: z.string().min(1).optional(),
     category: z.enum(['COURT_REPORTING', 'ACCESSIBILITY']).optional(),
