@@ -216,9 +216,9 @@ export class IntegrationOrchestrator {
                 additionalCopies: billingData.additionalCopies,
                 pageRate: rates.pageRate,
                 copyRate: rates.copyRate,
-                appearanceFee: booking.location?.toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson,
+                appearanceFee: (booking.location || '').toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson,
                 congestionFee: rates.rateTier === 'PRIVATE' ? 0 : rates.congestionFee,
-                realtimeFee: billingData.realtimeDevices ? (billingData.pages * rates.privateRealtimeFee * billingData.realtimeDevices) : 0,
+                realtimeFee: billingData.realtimeDevices ? (billingData.pages * rates.realtimeFee * billingData.realtimeDevices) : 0,
                 realtimeDevices: billingData.realtimeDevices,
                 roughFee: billingData.hasRough ? (billingData.pages * rates.roughRate) : 0,
                 videographerFee: billingData.hasVideographer ? (billingData.pages * rates.videographerRate) : 0,
@@ -278,7 +278,7 @@ export class IntegrationOrchestrator {
                     lineItems.push({
                         name: 'Appearance & Logistics',
                         description: 'Flat Fee coverage',
-                        rate: (booking.location?.toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson) + (rates.rateTier === 'PRIVATE' ? 0 : rates.congestionFee),
+                        rate: ((booking.location || '').toLowerCase().includes('remote') ? rates.appearanceFeeRemote : rates.appearanceFeeInPerson) + (rates.rateTier === 'PRIVATE' ? 0 : rates.congestionFee),
                         quantity: 1
                     })
 
