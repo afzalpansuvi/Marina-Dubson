@@ -30,6 +30,113 @@ const confirmedOrder = [
     'Other'
 ]
 
+const standardServices = [
+    {
+        serviceName: 'Deposition',
+        category: 'COURT_REPORTING' as any,
+        subService: 'DEPOSITION' as any,
+        defaultMinimumFee: 400,
+        pageRate: 4.25,
+        appearanceFeeRemote: 100,
+        appearanceFeeInPerson: 200,
+        realtimeFee: 1.5,
+        expediteImmediate: 1.25,
+        expedite1Day: 1.10,
+        expedite2Day: 1.00,
+        expedite3Day: 0.90,
+        privatePageRate: 4.75,
+        privateAppearanceFeeRemote: 100,
+        privateAppearanceFeeInPerson: 200,
+        privateMinimumFee: 400,
+        description: 'Certified stenographic reporting for standard depositions.',
+        active: true,
+    },
+    {
+        serviceName: 'Arbitration/Hearings',
+        category: 'COURT_REPORTING' as any,
+        subService: 'ARBITRATION_HEARINGS' as any,
+        defaultMinimumFee: 500,
+        pageRate: 6.25,
+        appearanceFeeRemote: 300,
+        appearanceFeeInPerson: 300,
+        realtimeFee: 2.5,
+        expediteImmediate: 1.25,
+        expedite1Day: 1.10,
+        expedite2Day: 1.00,
+        expedite3Day: 0.90,
+        privatePageRate: 6.75,
+        privateAppearanceFeeRemote: 300,
+        privateAppearanceFeeInPerson: 300,
+        privateMinimumFee: 400,
+        description: 'Specialized stenographic support for arbitrations and detailed hearings.',
+        active: true,
+    },
+    {
+        serviceName: 'Hearing',
+        category: 'COURT_REPORTING' as any,
+        subService: 'HEARING' as any,
+        defaultMinimumFee: 400,
+        pageRate: 5.5,
+        appearanceFeeRemote: 100,
+        appearanceFeeInPerson: 200,
+        realtimeFee: 2.0,
+        privatePageRate: 5.75,
+        description: 'Stenographic recording services for court hearings.',
+        active: true,
+    },
+    {
+        serviceName: 'Examinations Under Oath',
+        category: 'COURT_REPORTING' as any,
+        subService: 'EXAMINATION' as any,
+        defaultMinimumFee: 400,
+        pageRate: 5.5,
+        appearanceFeeRemote: 100,
+        appearanceFeeInPerson: 200,
+        realtimeFee: 2.0,
+        description: 'Professional recording for EUOs.',
+        active: true,
+    },
+    {
+        serviceName: 'CART',
+        category: 'ACCESSIBILITY' as any,
+        subService: 'CART' as any,
+        defaultMinimumFee: 400,
+        pageRate: 0,
+        appearanceFeeRemote: 100,
+        appearanceFeeInPerson: 200,
+        description: 'Communication Access Real-Time Translation for ADA accessibility.',
+        active: true,
+    },
+    {
+        serviceName: 'Other',
+        category: 'COURT_REPORTING' as any,
+        subService: 'OTHER' as any,
+        defaultMinimumFee: 400,
+        pageRate: 5.5,
+        appearanceFeeRemote: 100,
+        appearanceFeeInPerson: 200,
+        description: 'Miscellaneous stenographic services.',
+        active: true,
+    }
+]
+
+async function syncStandardServices() {
+    for (const service of standardServices) {
+        try {
+            await prisma.service.upsert({
+                where: { id: 'seed-' + service.serviceName.toLowerCase().replace(/[\s\/]/g, '-') },
+                update: service as any,
+                create: {
+                    id: 'seed-' + service.serviceName.toLowerCase().replace(/[\s\/]/g, '-'),
+                    ...service
+                } as any
+            })
+        } catch (error) {
+            console.warn('Default service sync failed for', service.serviceName, error)
+        }
+    }
+}
+
 // GET all services
 export async function GET(request: NextRequest) {
     try {
@@ -44,118 +151,12 @@ export async function GET(request: NextRequest) {
         if (category) where.category = category
         if (active !== null) where.active = active === 'true'
 
+        await syncStandardServices()
+
         let services = await prisma.service.findMany({
             where,
             orderBy: { serviceName: 'asc' },
         })
-
-        // Requirement 13/7: Absolute synchronization of standardized categories
-        const defaultServices = [
-                {
-                    serviceName: 'Deposition',
-                    category: 'COURT_REPORTING' as any,
-                    subService: 'DEPOSITION' as any,
-                    defaultMinimumFee: 400,
-                    pageRate: 4.25,
-                    appearanceFeeRemote: 100,
-                    appearanceFeeInPerson: 200,
-                    realtimeFee: 1.5,
-                    expediteImmediate: 1.25,
-                    expedite1Day: 1.10,
-                    expedite2Day: 1.00,
-                    expedite3Day: 0.90,
-                    privatePageRate: 4.75,
-                    privateAppearanceFeeRemote: 100,
-                    privateAppearanceFeeInPerson: 200,
-                    privateMinimumFee: 400,
-                    description: 'Certified stenographic reporting for standard depositions.',
-                    active: true,
-                },
-                {
-                    serviceName: 'Arbitration/Hearings',
-                    category: 'COURT_REPORTING' as any,
-                    subService: 'ARBITRATION_HEARINGS' as any,
-                    defaultMinimumFee: 500,
-                    pageRate: 6.25,
-                    appearanceFeeRemote: 300,
-                    appearanceFeeInPerson: 300,
-                    realtimeFee: 2.5,
-                    expediteImmediate: 1.25,
-                    expedite1Day: 1.10,
-                    expedite2Day: 1.00,
-                    expedite3Day: 0.90,
-                    privatePageRate: 6.75,
-                    privateAppearanceFeeRemote: 300,
-                    privateAppearanceFeeInPerson: 300,
-                    privateMinimumFee: 400,
-                    description: 'Specialized stenographic support for arbitrations and detailed hearings.',
-                    active: true,
-                },
-                {
-                    serviceName: 'Hearing',
-                    category: 'COURT_REPORTING' as any,
-                    subService: 'HEARING' as any,
-                    defaultMinimumFee: 400,
-                    pageRate: 5.5,
-                    appearanceFeeRemote: 100,
-                    appearanceFeeInPerson: 200,
-                    realtimeFee: 2.0,
-                    privatePageRate: 5.75,
-                    description: 'Stenographic recording services for court hearings.',
-                    active: true,
-                },
-                {
-                    serviceName: 'Examinations Under Oath',
-                    category: 'COURT_REPORTING' as any,
-                    subService: 'EXAMINATION' as any,
-                    defaultMinimumFee: 400,
-                    pageRate: 5.5,
-                    appearanceFeeRemote: 100,
-                    appearanceFeeInPerson: 200,
-                    realtimeFee: 2.0,
-                    description: 'Professional recording for EUOs.',
-                    active: true,
-                },
-                {
-                    serviceName: 'CART',
-                    category: 'ACCESSIBILITY' as any,
-                    subService: 'CART' as any,
-                    defaultMinimumFee: 400,
-                    pageRate: 0,
-                    appearanceFeeRemote: 100,
-                    appearanceFeeInPerson: 200,
-                    description: 'Communication Access Real-Time Translation for ADA accessibility.',
-                    active: true,
-                },
-                {
-                    serviceName: 'Other',
-                    category: 'COURT_REPORTING' as any,
-                    subService: 'OTHER' as any,
-                    defaultMinimumFee: 400,
-                    pageRate: 5.5,
-                    appearanceFeeRemote: 100,
-                    appearanceFeeInPerson: 200,
-                    description: 'Miscellaneous stenographic services.',
-                    active: true,
-                }
-            ]
-
-            for (const s of defaultServices) {
-                await prisma.service.upsert({
-                    where: { id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-') },
-                    update: s as any,
-                    create: {
-                        id: 'seed-' + s.serviceName.toLowerCase().replace(/[\s\/]/g, '-'),
-                        ...s
-                    } as any
-                })
-            }
-
-            // Refetch to include the newly synced items
-            services = await prisma.service.findMany({
-                where,
-                orderBy: { serviceName: 'asc' },
-            })
 
         // Apply mandatory sorting per Requirement 7
         services.sort((a, b) => {
