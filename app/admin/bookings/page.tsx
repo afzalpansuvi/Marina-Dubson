@@ -729,16 +729,38 @@ export default function BookingManagementPage() {
                                 <div className="flex items-center gap-3 p-2 rounded-2xl bg-muted/50 border border-border/50 overflow-x-auto no-scrollbar">
                                     {b.reporter ? (
                                         <div className="flex gap-2">
-                                            <button onClick={(e) => { e.stopPropagation(); setAssigningBookingId(b.id); setShowAssignModal(true) }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground min-w-max shadow-lg shadow-primary/20 hover:scale-105 transition-all">
+                                            <button 
+                                                disabled={b.bookingStatus === 'COMPLETED'}
+                                                onClick={(e) => { e.stopPropagation(); setAssigningBookingId(b.id); setShowAssignModal(true) }} 
+                                                className={`flex items-center gap-2 px-3 py-2 rounded-xl bg-primary text-primary-foreground min-w-max shadow-lg shadow-primary/20 hover:scale-105 transition-all ${b.bookingStatus === 'COMPLETED' ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                            >
                                                 <User className="h-3 w-3" />
                                                 <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{b.reporter.firstName} {b.reporter.lastName}</span>
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); handleUnassignReporter(b.id) }} className="px-3 py-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-[8px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all">Unassign</button>
+                                            <button 
+                                                disabled={b.bookingStatus === 'COMPLETED'}
+                                                onClick={(e) => { e.stopPropagation(); handleUnassignReporter(b.id) }} 
+                                                className={`px-3 py-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200 text-[8px] font-black uppercase tracking-widest hover:bg-rose-100 transition-all ${b.bookingStatus === 'COMPLETED' ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                            >
+                                                Unassign
+                                            </button>
                                         </div>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <button onClick={(e) => { e.stopPropagation(); setAssigningBookingId(b.id); setShowAssignModal(true) }} className="px-3 py-2 rounded-xl bg-indigo-500 text-white text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/10 hover:scale-105 transition-all">Assign</button>
-                                            <button onClick={(e) => { e.stopPropagation(); toggleMarketplace(b.id, b.isMarketplace) }} className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border tracking-widest transition-all ${b.isMarketplace ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}>{b.isMarketplace ? 'Unpublish' : 'Publish'}</button>
+                                            <button 
+                                                disabled={b.bookingStatus === 'COMPLETED'}
+                                                onClick={(e) => { e.stopPropagation(); setAssigningBookingId(b.id); setShowAssignModal(true) }} 
+                                                className={`px-3 py-2 rounded-xl bg-indigo-500 text-white text-[8px] font-black uppercase tracking-widest shadow-lg shadow-indigo-500/10 hover:scale-105 transition-all ${b.bookingStatus === 'COMPLETED' ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
+                                            >
+                                                Assign
+                                            </button>
+                                            <button 
+                                                disabled={b.bookingStatus === 'COMPLETED'}
+                                                onClick={(e) => { e.stopPropagation(); toggleMarketplace(b.id, b.isMarketplace) }} 
+                                                className={`px-3 py-2 rounded-xl text-[8px] font-black uppercase border tracking-widest transition-all ${b.bookingStatus === 'COMPLETED' ? 'opacity-50 cursor-not-allowed pointer-events-none' : b.isMarketplace ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'}`}
+                                            >
+                                                {b.isMarketplace ? 'Unpublish' : 'Publish'}
+                                            </button>
                                         </div>
                                     )}
                                     <div className="flex items-center gap-2">

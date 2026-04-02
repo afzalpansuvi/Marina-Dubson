@@ -15,6 +15,7 @@ export default function InvoiceDetailPage() {
     const [isEditing, setIsEditing] = useState(false)
     const [editData, setEditData] = useState<any>({})
     const [saving, setSaving] = useState(false)
+    const [markingPaid, setMarkingPaid] = useState(false)
     const printRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -59,23 +60,40 @@ export default function InvoiceDetailPage() {
     }
 
     const handleMarkAsPaid = async () => {
+        if (markingPaid) return
         if (!confirm('This will mark the invoice as PAID (Direct Settlement). Continue?')) return
-        setSaving(true)
+        const token = localStorage.getItem('token')
+        if (!token) {
+            alert('Authentication required. Please sign in again.')
+            return
+        }
+        setMarkingPaid(true)
         try {
-            const token = localStorage.getItem('token')
             const res = await fetch(`/api/invoices/${id}`, {
                 method: 'PATCH',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ status: 'PAID', paymentMethod: 'DIRECT_DEPOSIT', paidAt: new Date() })
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    status: 'PAID',
+                    paymentMethod: 'DIRECT_DEPOSIT',
+                    paidAt: new Date().toISOString()
+                })
             })
             if (res.ok) {
                 const data = await res.json()
                 setInvoice(data)
+            } else {
+                const errorData = await res.json().catch(() => ({}))
+                console.error('Mark paid failed:', errorData)
+                alert(errorData.error || 'Failed to mark invoice as paid.')
             }
         } catch (e) {
             console.error(e)
+            alert('An unexpected error occurred while settling the invoice.')
         } finally {
-            setSaving(false)
+            setMarkingPaid(false)
         }
     }
 
@@ -84,6 +102,12 @@ export default function InvoiceDetailPage() {
     const paymentButtonClasses = payUrl
         ? 'flex-1 sm:flex-none luxury-button flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 h-auto text-[8px] sm:text-[9px] font-black uppercase tracking-widest whitespace-nowrap bg-emerald-500 text-white shadow-xl shadow-emerald-500/40 active:scale-95 transition-all shrink-0'
         : 'flex-1 sm:flex-none luxury-button flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 h-auto text-[8px] sm:text-[9px] font-black uppercase tracking-widest whitespace-nowrap bg-primary text-primary-foreground shadow-xl active:scale-95 transition-all shrink-0'
+    const markPaidLabel = markingPaid ? 'Settling...' : 'Mark Paid (Direct)'
+    const markPaidClasses = `flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all shrink-0 ${
+        markingPaid
+            ? 'bg-indigo-200 text-indigo-400 border-indigo-200 cursor-not-allowed'
+            : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 active:scale-95'
+    }`
 
     const handlePrint = () => {
         window.print()
@@ -242,12 +266,14 @@ export default function InvoiceDetailPage() {
                             </button>
                         )}
                         {invoice.status !== 'PAID' && invoice.contact?.clientType === 'AGENCY' && (
-                             <button
+                            <button
                                 onClick={handleMarkAsPaid}
-                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-[8px] sm:text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0"
+                                disabled={markingPaid}
+                                aria-busy={markingPaid}
+                                className={markPaidClasses}
                             >
                                 <CheckCircle className="h-3.5 w-3.5" />
-                                Mark Paid (Direct)
+                                {markPaidLabel}
                             </button>
                         )}
                         <button onClick={handlePrint} className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 rounded-xl border border-border bg-card text-muted-foreground hover:text-primary hover:border-primary/40 text-[8px] sm:text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shrink-0">
@@ -399,10 +425,12 @@ export default function InvoiceDetailPage() {
                                     </div>
                                 </div>
                             </div>
-                                        {/* Protocol Specs (Grid instead of Table for mobile) */}
+                        </div>
+
+                        {/* Protocol Specs */}
                         <div className="space-y-6">
                             <div className="flex items-center justify-between">
-                                <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em]">Operational Yield Specs</p>
+                                <p className="text-[9px] font-black text-muted-foreground uppercase tracking-[0.3em]">Operational Yield Ledger</p>
                                 {isEditing && (
                                     <div className="flex items-center gap-3">
                                         <span className="text-[9px] font-black text-muted-foreground uppercase">Rate Tier:</span>
@@ -418,36 +446,25 @@ export default function InvoiceDetailPage() {
                                 )}
                             </div>
 
-                            {/* Header for web */}
-                            <div className="hidden sm:grid grid-cols-12 px-6 py-4 bg-primary text-primary-foreground rounded-2xl text-[9px] font-black uppercase tracking-widest shadow-xl">
-                                <div className="col-span-6">Service Protocol</div>
-                                <div className="col-span-2 text-center">Quantity/Pages</div>
-                                <div className="col-span-2 text-center">Rate/Unit</div>
-                                <div className="col-span-2 text-right">Yield</div>
-                            </div>
-
-                            <div className="space-y-4 sm:space-y-2">
+                            <div className="space-y-4">
                                 {!isEditing ? (
-                                    lineItems.map((item, i) => (
-                                        <div key={i} className="grid grid-cols-1 sm:grid-cols-12 px-6 py-5 sm:py-4 rounded-2xl border border-border bg-card hover:bg-muted/30 transition-all group/item">
-                                            <div className="col-span-1 sm:col-span-6 space-y-1 mb-4 sm:mb-0">
-                                                <p className="text-sm font-black text-foreground uppercase tracking-tight group-hover/item:text-primary transition-colors">{item.label}</p>
-                                                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{item.detail}</p>
+                                    <div className="bg-card/40 rounded-[2rem] border border-border/60 overflow-hidden shadow-sm">
+                                        {lineItems.map((item, i) => (
+                                            <div key={i} className="flex items-center justify-between px-6 sm:px-10 py-5 hover:bg-muted/30 transition-all border-b border-border/50 last:border-0 group/item relative overflow-hidden">
+                                                <div className="flex-1 pr-4">
+                                                    <div className="flex items-center gap-3">
+                                                       <div className="h-1 sm:h-1.5 w-1 sm:w-1.5 rounded-full bg-primary/40 group-hover/item:scale-125 transition-transform" />
+                                                       <p className="text-[11px] sm:text-[13px] font-black text-foreground uppercase tracking-tight group-hover/item:text-primary transition-colors">{item.label}</p>
+                                                    </div>
+                                                    <p className="text-[8px] sm:text-[9px] font-black text-muted-foreground uppercase tracking-widest pl-4 sm:pl-5.5 opacity-70">{item.detail}</p>
+                                                </div>
+                                                <div className="flex flex-col items-end">
+                                                    <p className="text-[8px] font-black text-muted-foreground uppercase tracking-widest mb-0.5 opacity-40">Yield Outcome</p>
+                                                    <p className="text-sm sm:text-xl font-black text-foreground tracking-tighter leading-none">${item.amount.toFixed(2)}</p>
+                                                </div>
                                             </div>
-                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 text-center">
-                                                <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Qty:</span>
-                                                <p className="text-xs font-black text-foreground uppercase">{pages > 0 ? pages : '—'}</p>
-                                            </div>
-                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 text-center mt-2 sm:mt-0">
-                                                <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Rate:</span>
-                                                <p className="text-xs font-black text-foreground uppercase">—</p>
-                                            </div>
-                                            <div className="flex sm:block justify-between items-center col-span-1 sm:col-span-2 mt-4 sm:mt-0 pt-4 sm:pt-0 border-t border-border sm:border-0 text-right">
-                                                <span className="sm:hidden text-[8px] font-black text-muted-foreground uppercase tracking-widest">Yield:</span>
-                                                <p className="text-sm sm:text-lg font-black text-foreground tracking-tighter">${item.amount.toFixed(2)}</p>
-                                            </div>
-                                        </div>
-                                    ))
+                                        ))}
+                                    </div>
                                 ) : (
                                     <div className="space-y-3">
                                         <EditRow label="Original Transcript" pages={editData.pages} onPagesChange={(v: number) => setEditData({ ...editData, pages: v })} rate={editData.pageRate} onRateChange={(v: number) => setEditData({ ...editData, pageRate: v })} yieldAmount={editData.pages * editData.pageRate * editData.originalCopies} />
@@ -474,7 +491,6 @@ export default function InvoiceDetailPage() {
                                 )}
                             </div>
                         </div>
-            </div>
 
                         {/* Totals Flux */}
                         <div className="flex flex-col xl:flex-row justify-between gap-12 pt-8">
@@ -543,35 +559,31 @@ export default function InvoiceDetailPage() {
 
 function EditRow({ label, pages, onPagesChange, rate, onRateChange, yieldAmount }: any) {
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-12 px-6 py-4 rounded-2xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-all gap-4 items-center">
-            <div className="col-span-1 sm:col-span-6">
-                <p className="text-xs font-black text-foreground uppercase tracking-tight">{label}</p>
+        <div className="flex items-center justify-between px-6 py-5 rounded-2xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-all gap-6">
+            <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-black text-foreground uppercase tracking-tight truncate">{label}</p>
             </div>
-            <div className="col-span-1 sm:col-span-2">
-                {onPagesChange ? (
+            <div className="flex items-center gap-3 shrink-0">
+                {onPagesChange && (
                     <input
                         type="number"
                         value={pages}
                         onChange={(e) => onPagesChange(parseInt(e.target.value) || 0)}
-                        className="w-full bg-white border border-border rounded-xl px-4 py-2 text-xs font-black text-center outline-none focus:ring-1 focus:ring-primary"
+                        className="w-16 bg-white border border-border rounded-xl px-2 py-2 text-[10px] font-black text-center outline-none focus:ring-1 focus:ring-primary"
                         placeholder="Qty"
                     />
-                ) : (
-                    <p className="text-[10px] font-black text-muted-foreground text-center uppercase tracking-widest">1</p>
                 )}
-            </div>
-            <div className="col-span-1 sm:col-span-2">
                 <input
                     type="number"
                     step="0.01"
                     value={rate}
                     onChange={(e) => onRateChange(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-white border border-border rounded-xl px-4 py-2 text-xs font-black text-center outline-none focus:ring-1 focus:ring-primary"
+                    className="w-20 bg-white border border-border rounded-xl px-2 py-2 text-[10px] font-black text-center outline-none focus:ring-1 focus:ring-primary"
                     placeholder="Rate"
                 />
-            </div>
-            <div className="col-span-1 sm:col-span-2 text-right">
-                <p className="text-sm font-black text-primary tracking-tighter leading-none">${yieldAmount.toFixed(2)}</p>
+                <div className="min-w-[80px] text-right">
+                    <p className="text-sm font-black text-primary tracking-tighter leading-none">${yieldAmount.toFixed(2)}</p>
+                </div>
             </div>
         </div>
     )

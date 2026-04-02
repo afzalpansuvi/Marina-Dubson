@@ -37,7 +37,9 @@ const updateSchema = z.object({
     total: z.number().optional(),
     rateTier: z.string().optional(),
     notes: z.string().optional(),
-    status: z.string().optional()
+    status: z.string().optional(),
+    paymentMethod: z.string().optional(),
+    paidAt: z.string().optional()
 })
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -66,7 +68,8 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         const updated = await prisma.invoice.update({
             where: { id: invoiceId },
             data: {
-                ...data
+                ...data,
+                paidAt: data.paidAt ? new Date(data.paidAt) : undefined
             }
         })
 

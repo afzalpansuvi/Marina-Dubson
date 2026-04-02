@@ -43,7 +43,7 @@ export class IntegrationOrchestrator {
             })
 
             const dealResult = await zohoCRM.createDeal({
-                Deal_Name: `${data.bookingNumber} - ${data.serviceName}`,
+                Deal_Name: `${data.bookingNumber} - ${data.serviceName} (${data.contactFirstName} ${data.contactLastName}${data.companyName ? ' @ ' + data.companyName : ''})`,
                 Stage: 'Qualification',
                 Amount: data.serviceAmount,
                 Closing_Date: data.bookingDate,

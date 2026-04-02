@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Calendar, Clock, MapPin, User, FileText, Loader2 } from 'lucide-react'
+import { ArrowLeft, Calendar, Clock, MapPin, User, FileText, Loader2, Zap, Settings2 } from 'lucide-react'
 
 export default function BookingDetailPage({ params }: { params: { id: string } }) {
     const router = useRouter()
@@ -14,6 +14,8 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
     const [editMode, setEditMode] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [editData, setEditData] = useState<any>({})
+
+    const isLocked = false // Always unlocked for admin management as per user request
 
     useEffect(() => {
         const fetchData = async () => {
@@ -99,13 +101,33 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
 
     return (
         <div className="max-w-5xl mx-auto px-6 py-10 space-y-8">
-            <div className="flex items-center gap-3">
-                <button onClick={() => router.back()} className="p-2 rounded-lg border border-border hover:border-primary/40">
-                    <ArrowLeft className="h-4 w-4" />
-                </button>
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Booking</p>
-                    <h1 className="text-3xl font-black text-foreground tracking-tight">#{booking.bookingNumber || booking.id}</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <button onClick={() => router.back()} className="p-2 rounded-lg border border-border hover:border-primary/40">
+                        <ArrowLeft className="h-4 w-4" />
+                    </button>
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Booking</p>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-3xl font-black text-foreground tracking-tight">#{booking.bookingNumber || booking.id}</h1>
+
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-border shadow-sm ${
+                        booking.bookingStatus === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-card text-muted-foreground'
+                    }`}>
+                        Status: {booking.bookingStatus}
+                    </span>
+                    {booking.invoice?.status && (
+                        <span className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border border-border shadow-sm ${
+                            ['SENT', 'PAID'].includes(booking.invoice.status.toUpperCase()) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' : 'bg-card text-muted-foreground'
+                        }`}>
+                            Invoice: {booking.invoice.status}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -125,15 +147,17 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
                 </div>
             </div>
 
-            <div className="flex gap-3">
-                <Link href="/admin/bookings" className="btn-secondary px-4 py-3 text-[10px] font-black uppercase tracking-widest">
-                    Back to bookings
+            <div className="flex flex-col sm:flex-row gap-3">
+                <Link href="/admin/bookings" className="btn-secondary px-6 py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center">
+                    Back to Registry
                 </Link>
                 <button 
-                    onClick={() => setEditMode(!editMode)} 
-                    className="btn-primary px-8 py-3 text-[10px] font-black uppercase tracking-[0.2em] shadow-xl"
+                    onClick={() => {
+                        setEditMode(!editMode)
+                    }} 
+                    className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.2em] shadow-xl whitespace-nowrap transition-all rounded-2xl border bg-primary text-primary-foreground border-primary hover:scale-105 active:scale-95`}
                 >
-                    {editMode ? 'Cancel Editing' : 'Management Protocol'}
+                    {editMode ? 'Cancel Edit' : 'Management Protocol'}
                 </button>
             </div>
 
@@ -184,7 +208,7 @@ export default function BookingDetailPage({ params }: { params: { id: string } }
                     <button 
                         onClick={handleSave} 
                         disabled={saving}
-                        className="w-full py-5 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl shadow-indigo-100 flex items-center justify-center gap-3"
+                        className="w-full py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center justify-center gap-3 bg-indigo-600 text-white shadow-indigo-100"
                     >
                         {saving ? <Loader2 className="animate-spin" /> : null} Commit Structural Updates
                     </button>

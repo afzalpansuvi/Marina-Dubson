@@ -327,7 +327,13 @@ export default function AdminHeader({ onToggleSidebar }: { onToggleSidebar: () =
                                         onClick={() => {
                                             router.push(`/admin/bookings?id=${booking.id}`);
                                             setIsNotifOpen(false);
-                                            window.dispatchEvent(new CustomEvent('admin-open-addon', { detail: { id: booking.id, text: booking.specialRequirements } }))
+                                            window.dispatchEvent(new CustomEvent('admin-open-addon', { 
+                                                detail: { 
+                                                    id: booking.id, 
+                                                    text: booking.specialRequirements,
+                                                    clientName: booking.contact?.companyName || (booking.contact ? `${booking.contact.firstName} ${booking.contact.lastName}` : 'Unknown Client')
+                                                } 
+                                            }))
                                         }}
                                         className="w-full px-4 py-3 flex gap-3 hover:bg-primary/5 transition-colors border-b border-border/50 text-left last:border-0 group"
                                     >
@@ -336,10 +342,10 @@ export default function AdminHeader({ onToggleSidebar }: { onToggleSidebar: () =
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs font-bold text-foreground uppercase tracking-tight mb-0.5 truncate">{booking.proceedingType}</p>
-                                            <p className="text-[9px] font-medium text-primary uppercase">Add-on request received</p>
+                                            <p className="text-[9px] font-medium text-muted-foreground uppercase">{booking.contact?.companyName || (booking.contact ? `${booking.contact.firstName} ${booking.contact.lastName}` : 'Private Client')}</p>
                                             <div className="flex items-center gap-1.5 mt-1">
                                                 <Check className="h-3 w-3 text-primary" />
-                                                <span className="text-[8px] font-black text-primary uppercase tracking-widest">Review & accept</span>
+                                                <span className="text-[8px] font-black text-primary uppercase tracking-widest">Add-on request</span>
                                             </div>
                                         </div>
                                     </button>

@@ -292,6 +292,40 @@ export async function POST(request: NextRequest) {
             html: emailTemplate.html,
         })
 
+        // Notify Admin of New Booking
+        try {
+            await sendEmail({
+                to: process.env.ADMIN_EMAIL || 'admin@marinadubson.com',
+                subject: `ALERT: New booking ${bookingNumber} (${b.contact?.companyName || (b.contact ? b.contact.firstName + ' ' + b.contact.lastName : 'Unknown')})`,
+                html: `
+                    <div style="font-family: sans-serif;">
+                        <h2>New Booking Strategy Detected</h2>
+                        <p><strong>Booking Number:</strong> ${bookingNumber}</p>
+                        <p><strong>Service:</strong> ${booking.proceedingType}</p>
+                        <p><strong>Client:</strong> ${b.contact.firstName} ${b.contact.lastName} (${b.contact.email})</p>
+                        <p><strong>Company:</strong> ${b.contact.companyName || 'Private Client'}</p>
+                        <p><strong>Date:</strong> ${format(new Date(data.bookingDate), 'PPPP')} at ${data.bookingTime}</p>
+                        <p><strong>Location:</strong> ${data.location || 'Remote'}</p>
+                        <hr />
+                        <p><strong>Add-ons Flagged:</strong></p>
+                        <ul>
+                            <li>Rough Draft: ${data.hasRough ? 'YES' : 'NO'}</li>
+                            <li>Real-time: ${data.hasRealtime ? 'YES' : 'NO'}</li>
+                            <li>CART Services: ${data.hasCart ? 'YES' : 'NO'}</li>
+                            <li>Videographer: ${data.hasVideographer ? 'YES' : 'NO'}</li>
+                            <li>Interpreter: ${data.hasInterpreter ? 'YES' : 'NO'}</li>
+                        </ul>
+                        <p><strong>Special Requirements:</strong></p>
+                        <pre>${data.specialRequirements || 'None'}</pre>
+                        <br />
+                        <a href="${process.env.NEXT_PUBLIC_APP_URL}/admin/bookings?id=${booking.id}" style="background: #0284c7; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View in Admin Portal</a>
+                    </div>
+                `
+            })
+        } catch (adminNotifyErr) {
+            console.error('New booking admin notification failed:', adminNotifyErr)
+        }
+
         return NextResponse.json(booking, { status: 201 })
     } catch (error) {
         if (error instanceof z.ZodError) {

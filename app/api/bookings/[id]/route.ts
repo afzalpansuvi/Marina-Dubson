@@ -6,9 +6,10 @@ import { sendEmail } from '@/lib/email'
 import { z } from 'zod'
 const updateSchema = z.object({
     specialRequirements: z.string().optional(),
-    reporterId: z.string().optional(),
+    reporterId: z.string().optional().nullable(),
     bookingStatus: z.string().optional(),
     isMarketplace: z.boolean().optional(),
+    isOpened: z.boolean().optional(),
     serviceId: z.string().optional(),
     proceedingType: z.string().optional(),
     lockedAppearanceFee: z.number().optional(),
@@ -59,10 +60,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         })
         if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
-        // Lock edits once invoice is paid
+        // Removed restriction: Admin and client can add add-ons even after billing/payment
+        /*
         if (booking.invoice?.status?.toUpperCase() === 'PAID') {
             return NextResponse.json({ error: 'Add-ons can no longer be edited after payment.' }, { status: 403 })
         }
+        */
 
         // Authorization
         const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'STAFF', 'MANAGER'].includes((payload.role || '').toUpperCase())
@@ -76,15 +79,16 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
         }
 
         if (isAdmin) {
-            updateData.reporterId = data.reporterId ?? booking.reporterId
-            updateData.bookingStatus = data.bookingStatus ?? booking.bookingStatus
-            updateData.isMarketplace = data.isMarketplace ?? booking.isMarketplace
-            updateData.serviceId = data.serviceId ?? booking.serviceId
-            updateData.proceedingType = data.proceedingType ?? booking.proceedingType
-            updateData.lockedAppearanceFee = data.lockedAppearanceFee ?? booking.lockedAppearanceFee
-            updateData.lockedPageRate = data.lockedPageRate ?? booking.lockedPageRate
-            updateData.lockedMinimumFee = data.lockedMinimumFee ?? booking.lockedMinimumFee
-            updateData.lockedRealtimeFee = data.lockedRealtimeFee ?? booking.lockedRealtimeFee
+            if (data.reporterId !== undefined) updateData.reporterId = data.reporterId
+            if (data.bookingStatus !== undefined) updateData.bookingStatus = data.bookingStatus
+            if (data.isMarketplace !== undefined) updateData.isMarketplace = data.isMarketplace
+            if (data.isOpened !== undefined) updateData.isOpened = data.isOpened
+            if (data.serviceId !== undefined) updateData.serviceId = data.serviceId
+            if (data.proceedingType !== undefined) updateData.proceedingType = data.proceedingType
+            if (data.lockedAppearanceFee !== undefined) updateData.lockedAppearanceFee = data.lockedAppearanceFee
+            if (data.lockedPageRate !== undefined) updateData.lockedPageRate = data.lockedPageRate
+            if (data.lockedMinimumFee !== undefined) updateData.lockedMinimumFee = data.lockedMinimumFee
+            if (data.lockedRealtimeFee !== undefined) updateData.lockedRealtimeFee = data.lockedRealtimeFee
         }
 
         const updated = await prisma.booking.update({
@@ -100,11 +104,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
                 try {
                     await sendEmail({
                         to: 'admin@marinadubson.com',
-                        subject: `Add-on update for booking ${booking.bookingNumber}`,
+                        subject: `Add-on update for booking ${booking.bookingNumber} (${booking.contact?.companyName || (booking.contact ? `${booking.contact.firstName} ${booking.contact.lastName}` : 'Unknown')})`,
                         html: `
-                            <p>A client updated add-ons/special requirements.</p>
+                            <p>A client updated add-ons/special requirements for their booking.</p>
                             <p><strong>Booking:</strong> ${booking.bookingNumber}</p>
                             <p><strong>Client:</strong> ${booking.contact?.firstName || ''} ${booking.contact?.lastName || ''} (${booking.contact?.email || ''})</p>
+                            <p><strong>Company:</strong> ${booking.contact?.companyName || 'Private Client'}</p>
                             <p><strong>New Notes:</strong></p>
                             <pre>${(data.specialRequirements || '').replace(/</g, '&lt;')}</pre>
                         `
