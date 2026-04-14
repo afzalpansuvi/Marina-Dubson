@@ -509,3 +509,76 @@ model SystemPolicy {
 
   @@index([key])
 }
+
+// Data Retention and Compliance Models
+model DataRetentionPolicy {
+  id              String   @id @default(cuid())
+  dataCategory    String   @unique // e.g., "CLIENT_DATA", "BOOKING_RECORDS", "MEDICAL_DATA"
+  retentionPeriod String   // e.g., "7_YEARS", "10_YEARS", "26_MONTHS"
+  description     String?
+  legalBasis      String   // e.g., "IRS_REQUIREMENT", "LEGAL_PROCEEDING", "NY_SHIELD_ACT"
+  autoDelete      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([dataCategory])
+}
+
+model DataAccessLog {
+  id          String   @id @default(cuid())
+  userId      String
+  resource    String   // e.g., "CONTACT", "BOOKING", "DOCUMENT"
+  resourceId  String
+  action      String   // e.g., "VIEW", "EDIT", "DELETE", "EXPORT"
+  accessedAt  DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  success     Boolean  @default(true)
+  failureReason String?
+
+  @@index([userId])
+  @@index([resource])
+  @@index([resourceId])
+  @@index([accessedAt])
+}
+
+model DataSubjectRequest {
+  id              String   @id @default(cuid())
+  requestType     String   // ACCESS, RECTIFICATION, ERASURE, RESTRICT, PORTABILITY
+  status          String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, REJECTED
+  email           String
+  name            String
+  description     String?
+  identityProof   String?  // Path to uploaded ID document
+  requestedAt     DateTime @default(now())
+  completedAt     DateTime?
+  responseData    String?  @db.Text // JSON string of the data or response
+  rejectionReason String?
+  assignedTo      String?  // User ID of staff handling the request
+
+  @@index([status])
+  @@index([requestedAt])
+  @@index([email])
+}
+
+model SecurityIncident {
+  id              String   @id @default(cuid())
+  incidentType    String   // BREACH, UNAUTHORIZED_ACCESS, DATA_LOSS, etc.
+  severity        String   // LOW, MEDIUM, HIGH, CRITICAL
+  status          String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  description     String   @db.Text
+  affectedData    String?  // JSON array of affected data categories
+  affectedUsers   Int      @default(0)
+  detectedAt      DateTime @default(now())
+  resolvedAt      DateTime?
+  notifiedAt      DateTime? // When affected parties were notified
+  notificationSent Boolean @default(false)
+  rootCause       String?
+  remediation     String?  @db.Text
+  reportedToAuthorities Boolean @default(false)
+  authorityReportedAt DateTime?
+
+  @@index([severity])
+  @@index([detectedAt])
+  @@index([status])
+}
