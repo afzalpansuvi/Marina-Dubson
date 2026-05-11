@@ -4,7 +4,7 @@ const nextConfig = {
     swcMinify: true,
     output: 'standalone',
     images: {
-        domains: ['localhost', 'images.unsplash.com', 'source.unsplash.com'],
+        domains: ['localhost', 'md.aitaah.com', 'images.unsplash.com', 'source.unsplash.com'],
     },
     eslint: {
         ignoreDuringBuilds: true,
