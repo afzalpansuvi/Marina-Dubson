@@ -27,6 +27,12 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/scripts/entrypoint.sh ./scripts/entrypoint.sh
 
+# Copy prisma CLI and generated client so entrypoint uses project version (5.x), not latest
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+RUN mkdir -p ./node_modules/.bin && ln -s ../prisma/build/index.js ./node_modules/.bin/prisma
+
 # Ensure the entrypoint script is executable
 RUN chmod +x ./scripts/entrypoint.sh
 
