@@ -53,18 +53,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    expose:
-      - "3000"
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.marina.rule=Host(`md.aitaah.com`)
-      - traefik.http.routers.marina.entrypoints=https
-      - traefik.http.routers.marina.tls=true
-      - traefik.http.routers.marina.tls.certresolver=letsencrypt
-      - traefik.http.services.marina.loadbalancer.server.port=3000
     networks:
       - internal
-      - coolify
 
 volumes:
   postgres_data:
@@ -73,5 +63,3 @@ volumes:
 networks:
   internal:
     driver: bridge
-  coolify:
-    external: true
