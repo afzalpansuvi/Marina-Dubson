@@ -53,17 +53,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    expose:
+      - "3000"
     labels:
       - traefik.enable=true
-      - "traefik.http.routers.marina-http.rule=Host(`${DOMAIN:-md.aitaah.com}`)"
-      - traefik.http.routers.marina-http.entrypoints=http
-      - traefik.http.routers.marina-http.middlewares=marina-https-redirect
-      - traefik.http.middlewares.marina-https-redirect.redirectscheme.scheme=https
-      - "traefik.http.routers.marina-https.rule=Host(`${DOMAIN:-md.aitaah.com}`)"
-      - traefik.http.routers.marina-https.entrypoints=https
-      - traefik.http.routers.marina-https.tls=true
-      - traefik.http.routers.marina-https.tls.certresolver=letsencrypt
-      - traefik.http.services.marina-https.loadbalancer.server.port=3000
+      - traefik.http.routers.marina.rule=Host(`md.aitaah.com`)
+      - traefik.http.routers.marina.entrypoints=https
+      - traefik.http.routers.marina.tls=true
+      - traefik.http.routers.marina.tls.certresolver=letsencrypt
+      - traefik.http.services.marina.loadbalancer.server.port=3000
     networks:
       - internal
       - coolify
