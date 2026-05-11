@@ -55,6 +55,7 @@ services:
       start_period: 40s
     networks:
       - internal
+      - coolify
 
 volumes:
   postgres_data:
@@ -63,3 +64,5 @@ volumes:
 networks:
   internal:
     driver: bridge
+  coolify:
+    external: true
