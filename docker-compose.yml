@@ -14,6 +14,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - internal
 
   app:
     build:
@@ -51,7 +53,16 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - internal
+      - coolify
 
 volumes:
   postgres_data:
   uploads_data:
+
+networks:
+  internal:
+    driver: bridge
+  coolify:
+    external: true
